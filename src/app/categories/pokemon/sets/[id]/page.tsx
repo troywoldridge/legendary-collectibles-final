@@ -27,6 +27,8 @@ type CardRow = {
   large_image: string | null;
 };
 
+type SearchParams = Record<string, string | string[] | undefined>;
+
 /* ---------- Helpers ---------- */
 const PER_PAGE_OPTIONS = [30, 60, 120, 240] as const;
 
@@ -68,21 +70,24 @@ export default async function SetDetailPage({
   params,
   searchParams,
 }: {
-  params: { id: string };
-  searchParams?: Record<string, string | string[] | undefined>;
+  /** Next 15: both are Promises */
+  params: Promise<{ id: string }>;
+  searchParams: Promise<SearchParams>;
 }) {
+  const { id: rawId } = await params;
+  const sp = await searchParams;
+
   // URL segment can be: set id (e.g., "sv9") OR a name slug ("White-Flare")
-  const rawParam = params.id ?? "";
-  const setParam = decodeURIComponent(rawParam).trim();
+  const setParam = decodeURIComponent(rawId ?? "").trim();
   const nameGuess = setParam.replace(/-/g, " ").trim();
   const likeGuess = `%${nameGuess}%`;
   const baseHref = `/categories/pokemon/sets/${encodeURIComponent(setParam)}`;
 
-  const q = (Array.isArray(searchParams?.q) ? searchParams?.q[0] : searchParams?.q)?.trim() || null;
-  const perPage = parsePerPage(searchParams?.perPage);
-  const reqPage = parsePage(searchParams?.page);
-  const raresOnly = parseBool(searchParams?.rares);
-  const holoOnly = parseBool(searchParams?.holo);
+  const q = (Array.isArray(sp?.q) ? sp.q[0] : sp?.q)?.trim() || null;
+  const perPage = parsePerPage(sp?.perPage);
+  const reqPage = parsePage(sp?.page);
+  const raresOnly = parseBool(sp?.rares);
+  const holoOnly = parseBool(sp?.holo);
 
   /* 1) Resolve the set (try the view first; then fallback to base table). */
   let setRow: SetRow | undefined;
@@ -166,7 +171,7 @@ export default async function SetDetailPage({
   const whereSql = sql.join(conditions, sql` AND `);
 
   /* Count + page slice */
-  const total =
+  const total: number =
     (
       await db.execute<{ count: number }>(
         sql`SELECT COUNT(*)::int AS count FROM tcg_cards WHERE ${whereSql}`
@@ -174,27 +179,22 @@ export default async function SetDetailPage({
     ).rows?.[0]?.count ?? 0;
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
-  const page = Math.min(totalPages, reqPage);
-  const offset = (page - 1) * perPage;
+  const safePage = Math.min(totalPages, reqPage);
+  const safeOffset = (safePage - 1) * perPage;
 
   const cards =
     (
       await db.execute<CardRow>(sql`
-        SELECT
-          id,
-          name,
-          rarity,
-          small_image,
-          large_image
+        SELECT id, name, rarity, small_image, large_image
         FROM tcg_cards
         WHERE ${whereSql}
         ORDER BY name ASC NULLS LAST, id ASC
-        LIMIT ${perPage} OFFSET ${offset}
+        LIMIT ${perPage} OFFSET ${safeOffset}
       `)
     ).rows ?? [];
 
-  const from = total === 0 ? 0 : offset + 1;
-  const to = Math.min(offset + perPage, total);
+  const from = total === 0 ? 0 : safeOffset + 1;
+  const to = Math.min(safeOffset + perPage, total);
 
   /* ---------- UI ---------- */
   const banner = setRow.logo_url || setRow.symbol_url || null;
@@ -222,7 +222,9 @@ export default async function SetDetailPage({
                 priority
               />
             ) : (
-              <div className="absolute inset-0 grid place-items-center text-white/60 text-xs">No image</div>
+              <div className="absolute inset-0 grid place-items-center text-white/60 text-xs">
+                No image
+              </div>
             )}
           </div>
           <div>
@@ -231,7 +233,17 @@ export default async function SetDetailPage({
           </div>
         </div>
 
-        <Link href="/categories/pokemon/sets" className="text-sky-300 hover:underline">← All sets</Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href={`${baseHref}/prices`}
+            className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20"
+          >
+            View price overview →
+          </Link>
+          <Link href="/categories/pokemon/sets" className="text-sky-300 hover:underline">
+            ← All sets
+          </Link>
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -313,7 +325,10 @@ export default async function SetDetailPage({
           {cards.map((c) => {
             const img = bestCardImg(c);
             return (
-              <li key={c.id} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden backdrop-blur-sm hover:bg-white/10 hover:border-white/20 transition">
+              <li
+                key={c.id}
+                className="rounded-xl border border-white/10 bg-white/5 overflow-hidden backdrop-blur-sm hover:bg-white/10 hover:border-white/20 transition"
+              >
                 <Link href={`/categories/pokemon/cards/${encodeURIComponent(c.id)}`} className="block">
                   <div className="relative w-full" style={{ aspectRatio: "3 / 4" }}>
                     {img ? (
@@ -344,17 +359,27 @@ export default async function SetDetailPage({
       {total > perPage && (
         <nav className="mt-4 flex items-center justify-center gap-2 text-sm">
           <Link
-            href={buildHref(baseHref, { q, perPage, rares: raresOnly, holo: holoOnly, page: Math.max(1, page - 1) })}
-            aria-disabled={page === 1}
-            className={`rounded-md border px-3 py-1 ${page === 1 ? "pointer-events-none border-white/10 text-white/40" : "border-white/20 text-white hover:bg-white/10"}`}
+            href={buildHref(baseHref, { q, perPage, rares: raresOnly, holo: holoOnly, page: Math.max(1, safePage - 1) })}
+            aria-disabled={safePage === 1}
+            className={`rounded-md border px-3 py-1 ${
+              safePage === 1
+                ? "pointer-events-none border-white/10 text-white/40"
+                : "border-white/20 text-white hover:bg-white/10"
+            }`}
           >
             ← Prev
           </Link>
-          <span className="px-2 text-white/80">Page {page} of {Math.max(1, Math.ceil(total / perPage))}</span>
+          <span className="px-2 text-white/80">
+            Page {safePage} of {totalPages}
+          </span>
           <Link
-            href={buildHref(baseHref, { q, perPage, rares: raresOnly, holo: holoOnly, page: page + 1 })}
-            aria-disabled={offset + perPage >= total}
-            className={`rounded-md border px-3 py-1 ${offset + perPage >= total ? "pointer-events-none border-white/10 text-white/40" : "border-white/20 text-white hover:bg-white/10"}`}
+            href={buildHref(baseHref, { q, perPage, rares: raresOnly, holo: holoOnly, page: safePage + 1 })}
+            aria-disabled={safeOffset + perPage >= total}
+            className={`rounded-md border px-3 py-1 ${
+              safeOffset + perPage >= total
+                ? "pointer-events-none border-white/10 text-white/40"
+                : "border-white/20 text-white hover:bg-white/10"
+            }`}
           >
             Next →
           </Link>

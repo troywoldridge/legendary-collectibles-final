@@ -9,7 +9,9 @@ import {
   text,
   boolean,
   timestamp,
+  numeric,
   uuid,
+  bigserial
 } from "drizzle-orm/pg-core";
 
 /**
@@ -286,4 +288,54 @@ export const tcg_supertypes = pgTable("tcg_supertypes", {
 // tcg_types
 export const tcg_types = pgTable("tcg_types", {
   name: text("name"),
+});
+
+
+
+
+export const tcgCardPricesTcgplayerHistory = pgTable("tcg_card_prices_tcgplayer_history", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  cardId: text("card_id").notNull(),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+  currency: text("currency"),
+  normal: numeric("normal", { precision: 12, scale: 2 }),
+  holofoil: numeric("holofoil", { precision: 12, scale: 2 }),
+  reverseHolofoil: numeric("reverse_holofoil", { precision: 12, scale: 2 }),
+  firstEditionHolofoil: numeric("first_edition_holofoil", { precision: 12, scale: 2 }),
+  firstEditionNormal: numeric("first_edition_normal", { precision: 12, scale: 2 }),
+});
+
+export const tcgCardPricesCardmarketHistory = pgTable("tcg_card_prices_cardmarket_history", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  cardId: text("card_id").notNull(),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+  averageSellPrice: numeric("average_sell_price", { precision: 12, scale: 2 }),
+  lowPrice: numeric("low_price", { precision: 12, scale: 2 }),
+  trendPrice: numeric("trend_price", { precision: 12, scale: 2 }),
+  germanProLow: numeric("german_pro_low", { precision: 12, scale: 2 }),
+  suggestedPrice: numeric("suggested_price", { precision: 12, scale: 2 }),
+  reverseHoloSell: numeric("reverse_holo_sell", { precision: 12, scale: 2 }),
+  reverseHoloLow: numeric("reverse_holo_low", { precision: 12, scale: 2 }),
+  reverseHoloTrend: numeric("reverse_holo_trend", { precision: 12, scale: 2 }),
+  lowPriceExPlus: numeric("low_price_ex_plus", { precision: 12, scale: 2 }),
+  avg1: numeric("avg1", { precision: 12, scale: 2 }),
+  avg7: numeric("avg7", { precision: 12, scale: 2 }),
+  avg30: numeric("avg30", { precision: 12, scale: 2 }),
+  reverseHoloAvg1: numeric("reverse_holo_avg1", { precision: 12, scale: 2 }),
+  reverseHoloAvg7: numeric("reverse_holo_avg7", { precision: 12, scale: 2 }),
+  reverseHoloAvg30: numeric("reverse_holo_avg30", { precision: 12, scale: 2 }),
+});
+
+export const ygoCardPricesHistory = pgTable("ygo_card_prices_history", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  cardId: text("card_id").notNull(),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+  tcgplayerPrice: numeric("tcgplayer_price", { precision: 12, scale: 2 }),
+  cardmarketPrice: numeric("cardmarket_price", { precision: 12, scale: 2 }),
+  ebayPrice: numeric("ebay_price", { precision: 12, scale: 2 }),
+  amazonPrice: numeric("amazon_price", { precision: 12, scale: 2 }),
+  coolstuffincPrice: numeric("coolstuffinc_price", { precision: 12, scale: 2 }),
 });

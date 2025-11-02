@@ -3,16 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-  "dev": "next dev -p 3001",
-  "build": "next build",
-  "start": "next start -p 3001",
-  "lint": "eslint"
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "eslint"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
     "drizzle-orm": "^0.44.7",
     "framer-motion": "^12.23.24",
     "next": "16.0.1",
+    "pg": "^8.16.3",
     "postgres": "^3.4.7",
     "react": "19.2.0",
     "react-dom": "19.2.0"

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { categories, products } from "@/lib/db/schema";
 import { asc, desc, eq } from "drizzle-orm";
 import { cfUrl } from "@/lib/cf";
+import { CF_ACCOUNT_HASH } from "@/lib/cf";
 
 /* ---------------- Types ---------------- */
 type FeaturedItem = {
@@ -48,6 +49,9 @@ const CATEGORIES_FALLBACK: ReadonlyArray<CategoryCard> = [
 const fmtUSD = (cents: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 })
     .format((cents || 0) / 100);
+
+const cfImageUrl = (id: string, variant = "categoryThumb") =>
+  `https://imagedelivery.net/${CF_ACCOUNT_HASH}/${id}/${variant}`    
 
 /* ---------------- Queries ---------------- */
 async function getCategoriesFromDB(): Promise<CategoryCard[]> {
@@ -189,48 +193,110 @@ export default async function HomePage() {
         </section>
 
         {/* SHOP BY CATEGORY */}
-        <section className="mt-8 sm:mt-10 lg:mt-12" aria-labelledby="shop-by-category">
-          <div className="mb-3 text-center">
-            <h2 id="shop-by-category" className="text-2xl font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,.6)] sm:text-3xl">
-              Shop by Category
-            </h2>
-            <p className="mt-1 text-2xl text-white/85 drop-shadow-[0_1px_1px_rgba(0,0,0,.6)]">
-              Find sealed product, singles, slabs, and figures by game or line.
-            </p>
-            <Link href="/categories" className="text-sm font-semibold text-white/90 underline underline-offset-4 hover:text-white">
-              View all →
-            </Link>
-          </div>
+{/* SHOP BY CATEGORY */}
+<section className="mt-8 sm:mt-10 lg:mt-12" aria-labelledby="shop-by-category">
+  <div className="mb-3 text-center">
+    <h2
+      id="shop-by-category"
+      className="text-2xl font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,.6)] sm:text-3xl"
+    >
+      Shop by Category
+    </h2>
+    <p className="mt-1 text-2xl text-white/85 drop-shadow-[0_1px_1px_rgba(0,0,0,.6)]">
+      Find sealed product, singles, slabs, and figures by game or line.
+    </p>
+    <Link
+      href="/categories"
+      className="text-sm font-semibold text-white/90 underline underline-offset-4 hover:text-white"
+    >
+      View all →
+    </Link>
+  </div>
 
-          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
-            {CATEGORIES.map((c) => {
-              const src = cfUrl(c.cfId, "categoryThumb") ?? FALLBACK_IMG;
-              return (
-                <li key={c.slug}>
-                  <Link
-                    href={`/categories/${c.slug}`}
-                    aria-label={`Browse ${c.label}`}
-                    className={[
-                      "group block overflow-hidden rounded-xl bg-transparent transition hover:shadow-[0_8px_24px_rgba(0,0,0,.35)]",
-                      CAT_CARD_HEIGHT,
-                    ].join(" ")}
-                  >
-                    <div className="relative h-full w-full">
-                      <Image
-                        src={src}
-                        alt={`${c.label} banner`}
-                        fill
-                        className="object-contain"
-                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                        priority={false}
-                      />
-                    </div>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+  {/*
+    Configure your tiles here.
+    HREFs point to future set indexes following the Pokémon pattern.
+    If your slugs differ, just tweak the hrefs.
+  */}
+  {(() => {
+    const TILES: Array<{
+      key: string;
+      label: string;
+      href: string;
+      cfId: string;
+      alt?: string;
+    }> = [
+      {
+        key: "pokemon",
+        label: "Pokémon",
+        href: "/categories/pokemon/sets",
+        cfId: "eb1a8f57-bd66-4203-fb59-32749ee3e500", // ✅ your provided ID
+        alt: "Pokémon category",
+      },
+      {
+        key: "yugioh",
+        label: "Yu-Gi-Oh!",
+        href: "/categories/yugioh/sets",
+        cfId: "87101a20-6ada-4b66-0057-2d210feb9d00", // ✅ your provided ID
+        alt: "Yu-Gi-Oh! category",
+      },
+      {
+        key: "mtg",
+        label: "Magic: The Gathering",
+        href: "/categories/mtg/sets",
+        cfId: "69ab5d2b-407c-4538-3c82-be8a551efa00", // ✅ your provided ID
+        alt: "Magic: The Gathering category",
+      },
+      {
+        key: "funko",
+        label: "Funko Pop",
+        href: "/categories/funko/sets",
+        cfId: "48efbf88-be1f-4a1f-f3f7-892fe21b5000", // ✅ your provided ID
+        alt: "Funko Pop category",
+      },
+      {
+        key: "sports",
+        label: "Sports Cards",
+        href: "/categories/sports/sets",
+        cfId: "f95ef753-c5fd-4079-9743-27cf651fd500", // ✅ your provided ID
+        alt: "Sports Cards category",
+      },
+    ];
+
+    return (
+      <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {TILES.map((t) => {
+          const src = cfImageUrl(t.cfId, "categoryThumb"); // change variant if you prefer
+          return (
+            <li
+              key={t.key}
+              className="rounded-xl border border-white/10 bg-white/5 overflow-hidden hover:border-white/20 hover:bg-white/10 transition"
+            >
+              <Link href={t.href} className="block">
+                <div className="relative w-full" style={{ aspectRatio: "4 / 3" }}>
+                  <Image
+                    src={src}
+                    alt={t.alt ?? t.label}
+                    fill
+                    unoptimized
+                    priority={t.key === "pokemon"}
+                    className="object-cover"
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                  />
+                </div>
+                <div className="p-3">
+                  <div className="text-sm font-semibold text-white">{t.label}</div>
+                  <div className="text-xs text-white/75">Shop now →</div>
+                </div>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  })()}
+</section>
+
 
         {/* FEATURED DROPS */}
         <section className="mt-10 sm:mt-12 lg:mt-14" aria-labelledby="featured-drops">

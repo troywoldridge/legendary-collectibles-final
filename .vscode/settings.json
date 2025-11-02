@@ -1,8 +1,19 @@
 {
     "cSpell.words": [
+        "banlist",
+        "cardinfo",
         "conds",
+        "coolstuffinc",
         "holofoil",
+        "hrefs",
+        "linkmarkers",
+        "linkval",
         "Pokédex",
-        "srcsets"
+        "srcsets",
+        "TIMESTAMPTZ",
+        "tsvector",
+        "Upserted",
+        "Upserting",
+        "ygoprodeck"
     ]
 }

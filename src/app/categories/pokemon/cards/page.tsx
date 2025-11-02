@@ -1,4 +1,3 @@
-// src/app/categories/pokemon/cards/page.tsx
 import "server-only";
 import Link from "next/link";
 import Image from "next/image";
@@ -48,24 +47,26 @@ function bestImg(small?: string | null, large?: string | null) {
 }
 
 /* ---------------- page ---------------- */
+type SearchParams = { q?: string; page?: string; perPage?: string };
+
 export default async function PokemonCardsIndex({
   searchParams,
 }: {
-  searchParams?: { q?: string; page?: string; perPage?: string };
+  /** Next 15: searchParams is a Promise */
+  searchParams: Promise<SearchParams>;
 }) {
+  const sp = await searchParams; // <-- KEY FIX
   const baseHref = "/categories/pokemon/cards";
 
-  const q: string | null = (searchParams?.q ?? "").trim() || null;
-  const perPage: number = parsePerPage(searchParams?.perPage);
-  const reqPage: number = parsePage(searchParams?.page);
+  const q: string | null = (sp?.q ?? "").trim() || null;
+  const perPage: number = parsePerPage(sp?.perPage);
+  const reqPage: number = parsePage(sp?.page);
   const page: number = Math.max(1, reqPage);
   const offset: number = (page - 1) * perPage;
 
   // WHERE
   const where = q
-    ? sql`WHERE (name ILIKE ${"%" + q + "%"} OR rarity ILIKE ${"%" + q + "%"} OR id ILIKE ${
-        "%" + q + "%"
-      })`
+    ? sql`WHERE (name ILIKE ${"%" + q + "%"} OR rarity ILIKE ${"%" + q + "%"} OR id ILIKE ${"%" + q + "%"})`
     : sql``;
 
   // COUNT
@@ -74,9 +75,7 @@ export default async function PokemonCardsIndex({
     FROM tcg_cards
     ${where}
   `;
-  const total: number = Number(
-    (await db.execute(countSql)).rows?.[0]?.count ?? 0
-  );
+  const total: number = Number((await db.execute(countSql)).rows?.[0]?.count ?? 0);
 
   const totalPages: number = Math.max(1, Math.ceil(total / Number(perPage)));
   const safePage: number = Math.min(page, totalPages);
@@ -84,15 +83,13 @@ export default async function PokemonCardsIndex({
 
   // PAGE
   const rowsSql = sql<CardListRow>`
-    SELECT
-      id, name, rarity, set_name, set_id, small_image, large_image
+    SELECT id, name, rarity, set_name, set_id, small_image, large_image
     FROM tcg_cards
     ${where}
     ORDER BY name ASC NULLS LAST, id ASC
     LIMIT ${Number(perPage)} OFFSET ${safeOffset}
   `;
-  const rowsRes = await db.execute(rowsSql);
-  const rows: CardListRow[] = (rowsRes.rows ?? []) as CardListRow[];
+  const rows = (await db.execute(rowsSql)).rows as CardListRow[];
 
   const from: number = total === 0 ? 0 : safeOffset + 1;
   const to: number = Math.min(safeOffset + Number(perPage), total);
@@ -138,9 +135,7 @@ export default async function PokemonCardsIndex({
           <form action={baseHref} method="get" className="flex items-center gap-2">
             {q ? <input type="hidden" name="q" value={q} /> : null}
             <input type="hidden" name="page" value="1" />
-            <label htmlFor="pp" className="sr-only">
-              Per page
-            </label>
+            <label htmlFor="pp" className="sr-only">Per page</label>
             <select
               id="pp"
               name="perPage"
@@ -148,9 +143,7 @@ export default async function PokemonCardsIndex({
               className="rounded-md border border-white/20 bg-white/10 px-2 py-1 text-white"
             >
               {PER_PAGE_OPTIONS.map((n) => (
-                <option key={String(n)} value={String(n)}>
-                  {n}
-                </option>
+                <option key={String(n)} value={String(n)}>{n}</option>
               ))}
             </select>
             <button
@@ -164,103 +157,95 @@ export default async function PokemonCardsIndex({
       </header>
 
       {/* grid */}
-      {rows.length === 0 ? (
-        <div className="rounded-xl border border-white/15 bg-white/5 p-6 text-white/90 backdrop-blur-sm">
-          {q ? "No cards matched your search." : "No cards to display."}
-        </div>
-      ) : (
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-          {rows.map((c) => {
-            const img = bestImg(c.small_image, c.large_image);
-            const setHref = c.set_name
-              ? `/categories/pokemon/sets/${encodeURIComponent(c.set_name)}`
-              : c.set_id
-              ? `/categories/pokemon/sets/${encodeURIComponent(c.set_id)}`
-              : undefined;
+{rows.length === 0 ? (
+  <div className="rounded-xl border border-white/15 bg-white/5 p-6 text-white/90 backdrop-blur-sm">
+    {q ? "No cards matched your search." : "No cards to display."}
+  </div>
+) : (
+  <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+    {rows.map((c) => {
+      const img = bestImg(c.small_image, c.large_image);
+      const cardHref = `/categories/pokemon/cards/${encodeURIComponent(c.id)}`;
+      const setHref = c.set_name
+        ? `/categories/pokemon/sets/${encodeURIComponent(c.set_name)}`
+        : c.set_id
+        ? `/categories/pokemon/sets/${encodeURIComponent(c.set_id)}`
+        : undefined;
 
-            return (
-              <li
-                key={String(c.id)}
-                className="rounded-xl border border-white/10 bg-white/5 overflow-hidden backdrop-blur-sm hover:bg-white/10 hover:border-white/20 transition"
-              >
-                <Link
-                  href={`/categories/pokemon/cards/${encodeURIComponent(c.id)}`}
-                  className="block"
-                >
-                  <div className="relative w-full" style={{ aspectRatio: "3 / 4" }}>
-                    {img ? (
-                      <Image
-                        src={img}
-                        alt={c.name ?? c.id}
-                        fill
-                        unoptimized
-                        className="object-contain"
-                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                      />
-                    ) : (
-                      <div className="absolute inset-0 grid place-items-center text-white/70">
-                        No image
-                      </div>
-                    )}
+      return (
+        <li
+          key={String(c.id)}
+          className="rounded-xl border border-white/10 bg-white/5 overflow-hidden backdrop-blur-sm hover:bg-white/10 hover:border-white/20 transition"
+        >
+          <div className="flex flex-col h-full">
+            {/* Card link (image + title) */}
+            <Link href={cardHref} className="block group flex-1">
+              <div className="relative w-full" style={{ aspectRatio: "3 / 4" }}>
+                {img ? (
+                  <Image
+                    src={img}
+                    alt={c.name ?? c.id}
+                    fill
+                    unoptimized
+                    className="object-contain transition-transform group-hover:scale-[1.02]"
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                  />
+                ) : (
+                  <div className="absolute inset-0 grid place-items-center text-white/70">
+                    No image
                   </div>
-                  <div className="p-3">
-                    <div className="line-clamp-2 text-sm font-medium text-white">
-                      {c.name ?? c.id}
-                    </div>
-                    <div className="mt-1 text-xs text-white/80">
-                      {c.rarity ?? ""}{" "}
-                      {setHref ? (
-                        <>
-                          {" • "}
-                          <Link
-                            href={setHref}
-                            className="underline hover:no-underline"
-                          >
-                            {c.set_name ?? c.set_id}
-                          </Link>
-                        </>
-                      ) : null}
-                    </div>
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                )}
+              </div>
+              <div className="p-3">
+                <div className="line-clamp-2 text-sm font-medium text-white group-hover:underline">
+                  {c.name ?? c.id}
+                </div>
+              </div>
+            </Link>
+
+            {/* Meta line with independent Set link (NOT nested inside the card link) */}
+            <div className="px-3 pb-3 pt-0 text-xs text-white/80">
+              {c.rarity ?? ""}
+              {setHref ? (
+                <>
+                  {" • "}
+                  <Link
+                    href={setHref}
+                    className="underline hover:no-underline"
+                  >
+                    {c.set_name ?? c.set_id}
+                  </Link>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </li>
+      );
+    })}
+  </ul>
+)}
+
 
       {/* pagination */}
       {total > perPage && (
         <nav className="mt-4 flex items-center justify-center gap-2 text-sm">
           <Link
-            href={buildHref(baseHref, {
-              q,
-              perPage,
-              page: Math.max(1, safePage - 1),
-            })}
-            aria-disabled={safePage === 1}
+            href={buildHref(baseHref, { q, perPage, page: Math.max(1, page - 1) })}
+            aria-disabled={page === 1}
             className={`rounded-md border px-3 py-1 ${
-              safePage === 1
-                ? "pointer-events-none border-white/10 text-white/40"
-                : "border-white/20 text-white hover:bg-white/10"
+              page === 1 ? "pointer-events-none border-white/10 text-white/40" : "border-white/20 text-white hover:bg-white/10"
             }`}
           >
             ← Prev
           </Link>
           <span className="px-2 text-white/80">
-            Page {safePage} of {totalPages}
+            Page {page} of {totalPages}
           </span>
           <Link
-            href={buildHref(baseHref, {
-              q,
-              perPage,
-              page: safePage + 1,
-            })}
-            aria-disabled={safeOffset + perPage >= total}
+            href={buildHref(baseHref, { q, perPage, page: page + 1 })}
+            aria-disabled={offset + perPage >= total}
             className={`rounded-md border px-3 py-1 ${
-              safeOffset + perPage >= total
-                ? "pointer-events-none border-white/10 text-white/40"
-                : "border-white/20 text-white hover:bg-white/10"
+              offset + perPage >= total ? "pointer-events-none border-white/10 text-white/40" : "border-white/20 text-white hover:bg-white/10"
             }`}
           >
             Next →
