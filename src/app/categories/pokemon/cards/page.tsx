@@ -114,7 +114,7 @@ export default async function PokemonCardsIndex({
               name="q"
               defaultValue={q ?? ""}
               placeholder="Search… (name/rarity/id)"
-              className="w-[240px] md:w-[320px] rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white placeholder:text-white/60 outline-none focus:ring-2 focus:ring-white/50"
+              className="w-60 md:w-[320px] rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white placeholder:text-white/60 outline-none focus:ring-2 focus:ring-white/50"
             />
             <button
               type="submit"

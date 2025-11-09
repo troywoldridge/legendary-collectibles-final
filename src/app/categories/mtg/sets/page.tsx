@@ -146,7 +146,7 @@ export default async function MtgSetsIndex({ searchParams }: { searchParams: Pro
           <form action={baseHref} method="get" className="flex items-center gap-2">
             <input type="hidden" name="perPage" value={String(perPage)} />
             <input type="hidden" name="page" value="1" />
-            <input name="q" defaultValue={q ?? ""} placeholder="Search sets (name/code/block)…" className="w-[240px] md:w-[320px] rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white placeholder:text-white/60 outline-none focus:ring-2 focus:ring-white/50" />
+            <input name="q" defaultValue={q ?? ""} placeholder="Search sets (name/code/block)…" className="w-60 md:w-[320px] rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white placeholder:text-white/60 outline-none focus:ring-2 focus:ring-white/50" />
             <button type="submit" className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/20">Search</button>
             {q && (
               <Link href={buildHref(baseHref, { perPage, page: 1 })} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white hover:bg-white/15">
