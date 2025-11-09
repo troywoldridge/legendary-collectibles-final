@@ -63,3 +63,9 @@ data/mtg/
 # logs & scratch
 logs/
 *.log
+
+# bulk data
+data/
+*.json
+*.jsonl
+*.zst
