@@ -36,6 +36,12 @@
     "// ebay — MTG": "",
     "cron:ebay:mtg": "node scripts/cron/fetchMtgEbayPrices.mjs --only-missing-primary --only-missing-ebay --days=7 --limit=0 --batch=800 --concurrency=4",
     "cron:ebay:mtg:all": "node scripts/cron/fetchMtgEbayPrices.mjs --all --limit=0 --batch=800 --concurrency=4",
+    "prices:ebay:all": "node scripts/ebayPriceSweep.mjs --game=all --concurrency=6",
+    "prices:ebay:mtg": "node scripts/cron/fetchMtgEbayPrices.mjs --all --limit=0 --batch=800 --concurrency=4",
+    "prices:ebay:pokemon": "node scripts/cron/fetchPkmnEbayPrices.mjs --all --limit=0 --batch=800 --concurrency=4",
+    "prices:ebay:ygo": "node scripts/cron/fetchYgoEbayPrices.mjs --all --limit=0 --batch=800 --concurrency=4",
+    
+    
 
     "// orchestrator — runs all four sequentially": "",
     "prices:all": "node scripts/cron/runAllPrices.mjs"
