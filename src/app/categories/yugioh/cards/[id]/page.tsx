@@ -1,3 +1,4 @@
+
 import "server-only";
 import Image from "next/image";
 import Link from "next/link";
@@ -6,10 +7,14 @@ import { db } from "@/lib/db";
 import YgoCardSearch from "@/components/ygo/YgoCardSearch";
 import { getLatestEbaySnapshot } from "@/lib/ebay";
 
-/* ★ NEW: auth, plan, button */
+/* Plan + collection */
 import { auth } from "@clerk/nextjs/server";
 import { getUserPlan } from "@/lib/plans";
 import AddToCollectionButton from "@/components/AddToCollectionButton";
+
+/* ★ Marketplace CTAs */
+import CardAmazonCTA from "@/components/CardAmazonCTA";
+import CardEbayCTA from "@/components/CardEbayCTA";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,8 +28,8 @@ type CardRow = {
   atk: number | null;
   def: number | null;
   level: number | null;
-  race: string | null;       // Type (Fiend/Dragon/etc.)
-  attribute: string | null;  // Attribute (DARK/LIGHT/etc.)
+  race: string | null;
+  attribute: string | null;
   archetype: string | null;
   ygoprodeck_url: string | null;
   linkval: number | null;
@@ -36,12 +41,7 @@ type ImageRow = { small: string | null; large: string | null };
 type PriceRow = { tcgplayer: string | null; cardmarket: string | null; ebay: string | null; amazon: string | null; coolstuffinc: string | null };
 type BanlistRow = { tcg: string | null; ocg: string | null; goat: string | null };
 
-type SetEntry = {
-  set_name: string;
-  set_code: string | null;
-  set_rarity: string | null;
-  set_price: string | null;
-};
+type SetEntry = { set_name: string; set_code: string | null; set_rarity: string | null; set_price: string | null };
 
 /* ---------------- Helpers ---------------- */
 function money(v: string | number | null | undefined) {
@@ -50,7 +50,6 @@ function money(v: string | number | null | undefined) {
   if (!Number.isFinite(n)) return "—";
   return `$${n.toFixed(2)}`;
 }
-
 function bestImage(imgs: ImageRow[]): string | null {
   if (!imgs?.length) return null;
   const first = imgs[0];
@@ -67,7 +66,6 @@ async function getCard(param: string): Promise<{
 }> {
   const id = decodeURIComponent(param).trim();
 
-  // Core card
   const card =
     (
       await db.execute<CardRow>(sql`
@@ -92,13 +90,10 @@ async function getCard(param: string): Promise<{
       `)
     ).rows?.[0] ?? null;
 
-  // Images
   const images =
     (
       await db.execute<ImageRow>(sql`
-        SELECT
-          i.image_url_small AS small,
-          i.image_url       AS large
+        SELECT i.image_url_small AS small, i.image_url AS large
         FROM ygo_card_images i
         WHERE i.card_id = ${id}
         ORDER BY (CASE WHEN i.image_url IS NOT NULL THEN 0 ELSE 1 END), i.image_url_small NULLS LAST
@@ -106,7 +101,6 @@ async function getCard(param: string): Promise<{
       `)
     ).rows ?? [];
 
-  // Prices
   const prices =
     (
       await db.execute<PriceRow>(sql`
@@ -122,32 +116,23 @@ async function getCard(param: string): Promise<{
       `)
     ).rows?.[0] ?? null;
 
-  // Banlist
   const banlist =
     (
       await db.execute<BanlistRow>(sql`
-        SELECT
-          b.ban_tcg  AS tcg,
-          b.ban_ocg  AS ocg,
-          b.ban_goat AS goat
+        SELECT b.ban_tcg AS tcg, b.ban_ocg AS ocg, b.ban_goat AS goat
         FROM ygo_card_banlist b
         WHERE b.card_id = ${id}
         LIMIT 1
       `)
     ).rows?.[0] ?? null;
 
-  // Sets the card appears in
   const sets =
     (
       await db.execute<SetEntry>(sql`
-        SELECT
-          s.set_name,
-          s.set_code,
-          s.set_rarity,
-          NULLIF(CAST(NULL AS text), '') AS set_price
+        SELECT s.set_name, s.set_code, s.set_rarity, s.set_price
         FROM ygo_card_sets s
         WHERE s.card_id = ${id}
-        GROUP BY s.set_name, s.set_code, s.set_rarity
+        GROUP BY s.set_name, s.set_code, s.set_rarity, s.set_price
         ORDER BY s.set_name ASC, s.set_code ASC NULLS LAST
       `)
     ).rows ?? [];
@@ -162,13 +147,11 @@ export default async function YugiohCardDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { card, images, prices, banlist, sets } = await getCard(id);
 
   if (!card) {
     return (
       <section className="space-y-6">
-        {/* Search (also available in not-found) */}
         <div className="rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur-sm">
           <div className="mb-2 text-sm font-semibold text-white">Find a card</div>
           <YgoCardSearch initialQuery={decodeURIComponent(id)} />
@@ -190,9 +173,8 @@ export default async function YugiohCardDetailPage({
   const ebay = await getLatestEbaySnapshot("ygo", card.id, "all");
   const moneyCents = (c?: number | null) => (c == null ? "—" : `$${(c / 100).toFixed(2)}`);
 
-  /* ★ NEW: plan gate — Free users can’t save */
+  /* plan gate */
   const { userId } = await auth();
-
   let canSave = false;
   if (userId) {
     const { limits } = await getUserPlan(userId);
@@ -201,7 +183,7 @@ export default async function YugiohCardDetailPage({
 
   return (
     <section className="space-y-8">
-      {/* Search at the top */}
+      {/* Quick search at the top */}
       <div className="rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur-sm">
         <div className="mb-2 text-sm font-semibold text-white">Find another card</div>
         <YgoCardSearch initialQuery={card.name} />
@@ -209,10 +191,10 @@ export default async function YugiohCardDetailPage({
 
       {/* Top: image left, info right */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Left: large card image */}
+        {/* Left: card image */}
         <div className="lg:col-span-5">
           <div className="rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur-sm">
-            <div className="relative mx-auto aspect-3/4 w-full max-w-md">
+            <div className="relative mx-auto w-full max-w-md" style={{ aspectRatio: "3 / 4" }}>
               {cover ? (
                 <Image
                   src={cover}
@@ -232,13 +214,13 @@ export default async function YugiohCardDetailPage({
           </div>
         </div>
 
-        {/* Right: title + tags + stats + sections */}
+        {/* Right: title + meta (text) → CTAs → rest */}
         <div className="lg:col-span-7 space-y-4">
-          {/* Title + meta row */}
           <div className="rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h1 className="text-2xl font-bold text-white">{card.name}</h1>
+                {/* ★ TEXT ABOVE CTAs */}
                 <div className="mt-1 text-sm text-white/80">
                   {card.type ? <span className="mr-3">Type: {card.type}</span> : null}
                   {card.attribute ? <span className="mr-3">Attribute: {card.attribute}</span> : null}
@@ -248,17 +230,13 @@ export default async function YugiohCardDetailPage({
               </div>
 
               {card.ygoprodeck_url && (
-                <Link
-                  href={card.ygoprodeck_url}
-                  target="_blank"
-                  className="text-sm text-sky-300 hover:underline"
-                >
+                <Link href={card.ygoprodeck_url} target="_blank" className="text-sm text-sky-300 hover:underline">
                   View on YGOPRODeck →
                 </Link>
               )}
             </div>
 
-            {/* ★ NEW: collection action */}
+            {/* Collection action */}
             <div className="mt-3">
               {canSave ? (
                 <AddToCollectionButton
@@ -270,13 +248,24 @@ export default async function YugiohCardDetailPage({
                   imageUrl={cover || undefined}
                 />
               ) : (
-                <Link
-                  href="/pricing"
-                  className="inline-block px-3 py-2 rounded bg-amber-500 text-white hover:bg-amber-600"
-                >
+                <Link href="/pricing" className="inline-block px-3 py-2 rounded bg-amber-500 text-white hover:bg-amber-600">
                   Upgrade to track your collection
                 </Link>
               )}
+            </div>
+
+            {/* CTAs (below meta text) */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <CardEbayCTA
+                card={{ id: card.id, name: card.name, set_name: firstSet ?? null }}
+                game="Yu-Gi-Oh!"
+                variant="pill"
+              />
+              <CardAmazonCTA
+                card={{ id: card.id, name: card.name, set_name: firstSet ?? null }}
+                game="Yu-Gi-Oh!"
+                variant="pill"
+              />
             </div>
 
             {/* Stat grid */}
@@ -300,7 +289,7 @@ export default async function YugiohCardDetailPage({
             </div>
           </div>
 
-          {/* Prices (site vendor table) */}
+          {/* Prices table */}
           <div className="rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur-sm">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-white">Market Prices</h2>
@@ -308,55 +297,40 @@ export default async function YugiohCardDetailPage({
             </div>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {/* Left column */}
               <div className="space-y-3">
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                   <div className="text-sm font-medium text-white">TCGplayer</div>
                   <div className="text-white/80">Price</div>
-                  <div className="mt-1 text-lg font-semibold text-white">
-                    {money(prices?.tcgplayer)}
-                  </div>
+                  <div className="mt-1 text-lg font-semibold text-white">{money(prices?.tcgplayer)}</div>
                 </div>
-
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                   <div className="text-sm font-medium text-white">eBay</div>
                   <div className="text-white/80">Price</div>
-                  <div className="mt-1 text-lg font-semibold text-white">
-                    {money(prices?.ebay)}
-                  </div>
+                  <div className="mt-1 text-lg font-semibold text-white">{money(prices?.ebay)}</div>
                 </div>
-
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                   <div className="text-sm font-medium text-white">CoolStuffInc</div>
                   <div className="text-white/80">Price</div>
-                  <div className="mt-1 text-lg font-semibold text-white">
-                    {money(prices?.coolstuffinc)}
-                  </div>
+                  <div className="mt-1 text-lg font-semibold text-white">{money(prices?.coolstuffinc)}</div>
                 </div>
               </div>
 
-              {/* Right column */}
               <div className="space-y-3">
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                   <div className="text-sm font-medium text-white">Cardmarket</div>
                   <div className="text-white/80">Price</div>
-                  <div className="mt-1 text-lg font-semibold text-white">
-                    {money(prices?.cardmarket)}
-                  </div>
+                  <div className="mt-1 text-lg font-semibold text-white">{money(prices?.cardmarket)}</div>
                 </div>
-
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                   <div className="text-sm font-medium text-white">Amazon</div>
                   <div className="text-white/80">Price</div>
-                  <div className="mt-1 text-lg font-semibold text-white">
-                    {money(prices?.amazon)}
-                  </div>
+                  <div className="mt-1 text-lg font-semibold text-white">{money(prices?.amazon)}</div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* eBay Snapshot (from historical table) */}
+          {/* eBay Snapshot */}
           {ebay && ebay.median_cents != null && (
             <div className="rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur-sm">
               <div className="mb-2 flex items-center justify-between">
@@ -368,9 +342,7 @@ export default async function YugiohCardDetailPage({
               <div className="text-white/90">
                 <div>
                   Median: <span className="font-semibold">{moneyCents(ebay.median_cents)}</span>{" "}
-                  {ebay.sample_count ? (
-                    <span className="text-white/60">• n={ebay.sample_count}</span>
-                  ) : null}
+                  {ebay.sample_count ? <span className="text-white/60">• n={ebay.sample_count}</span> : null}
                 </div>
                 <div className="text-sm text-white/80">
                   IQR: {moneyCents(ebay.p25_cents)} – {moneyCents(ebay.p75_cents)}
@@ -405,14 +377,7 @@ export default async function YugiohCardDetailPage({
                   className="rounded-xl border border-white/10 bg-white/5 p-3 hover:border-white/20 hover:bg-white/10 transition"
                 >
                   <div className="text-sm font-medium text-white line-clamp-1">{s.set_name}</div>
-                  <div className="mt-1 text-xs text-white/70">
-                    {s.set_rarity ?? "—"}
-                    {s.set_price ? (
-                      <span className="ml-2">
-                        • {Number.isFinite(+s.set_price!) ? money(s.set_price!) : s.set_price}
-                      </span>
-                    ) : null}
-                  </div>
+                  <div className="mt-1 text-xs text-white/70">{s.set_rarity ?? "—"}</div>
                 </Link>
               );
             })}
@@ -424,6 +389,13 @@ export default async function YugiohCardDetailPage({
       <div className="rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur-sm">
         <h2 className="text-lg font-semibold text-white">Card Text</h2>
         <p className="mt-2 whitespace-pre-wrap text-white/90">{card.desc || "—"}</p>
+        {banlist && (
+          <div className="mt-3 text-sm text-white/80">
+            <span className="mr-3">Banlist (TCG): {banlist.tcg ?? "—"}</span>
+            <span className="mr-3">OCG: {banlist.ocg ?? "—"}</span>
+            <span>GOAT: {banlist.goat ?? "—"}</span>
+          </div>
+        )}
       </div>
 
       {/* Footer nav */}
@@ -437,14 +409,6 @@ export default async function YugiohCardDetailPage({
             className="text-sky-300 hover:underline"
           >
             ← Back to set
-          </Link>
-        )}
-        {firstSet && (
-          <Link
-            href={`/categories/yugioh/sets/${encodeURIComponent(firstSet)}/prices`}
-            className="text-sky-300 hover:underline"
-          >
-            View set price overview →
           </Link>
         )}
       </div>

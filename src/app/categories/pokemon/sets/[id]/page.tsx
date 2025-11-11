@@ -1,9 +1,13 @@
-// src/app/categories/pokemon/sets/[id]/page.tsx
+
 import "server-only";
 import Link from "next/link";
 import Image from "next/image";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+
+/* ★ Marketplace CTAs */
+import CardAmazonCTA from "@/components/CardAmazonCTA";
+import CardEbayCTA from "@/components/CardEbayCTA";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,7 +81,6 @@ export default async function SetDetailPage({
   const { id: rawId } = await params;
   const sp = await searchParams;
 
-  // URL segment can be: set id (e.g., "sv9") OR a name slug ("White-Flare")
   const setParam = decodeURIComponent(rawId ?? "").trim();
   const nameGuess = setParam.replace(/-/g, " ").trim();
   const likeGuess = `%${nameGuess}%`;
@@ -89,7 +92,7 @@ export default async function SetDetailPage({
   const raresOnly = parseBool(sp?.rares);
   const holoOnly = parseBool(sp?.holo);
 
-  /* 1) Resolve the set (try the view first; then fallback to base table). */
+  /* 1) Resolve the set */
   let setRow: SetRow | undefined;
 
   try {
@@ -111,7 +114,7 @@ export default async function SetDetailPage({
     `);
     setRow = res.rows?.[0];
   } catch {
-    // view may not exist; fall through
+    // ignore view errors
   }
 
   if (!setRow) {
@@ -151,7 +154,6 @@ export default async function SetDetailPage({
     );
   }
 
-  // Use the canonical set ID we resolved to load cards
   const canonicalSetId = setRow.id;
 
   /* --- Card filters --- */
@@ -230,6 +232,20 @@ export default async function SetDetailPage({
           <div>
             <h1 className="text-2xl font-bold text-white">{setRow.name ?? setParam}</h1>
             {subtitle && <div className="text-sm text-white/80">{subtitle}</div>}
+
+            {/* ★ Set-level CTAs */}
+            <div className="mt-2 flex flex-wrap gap-2">
+              <CardEbayCTA
+                card={{ id: setRow.id, name: setRow.name ?? setRow.id, set_code: setRow.id, set_name: setRow.name ?? setRow.id }}
+                game="Pokémon TCG"
+                variant="pill"
+              />
+              <CardAmazonCTA
+                card={{ id: setRow.id, name: setRow.name ?? setRow.id, set_code: setRow.id, set_name: setRow.name ?? setRow.id }}
+                game="Pokémon TCG"
+                variant="pill"
+              />
+            </div>
           </div>
         </div>
 
@@ -349,6 +365,33 @@ export default async function SetDetailPage({
                     <div className="mt-1 text-xs text-white/80">{c.rarity ?? ""}</div>
                   </div>
                 </Link>
+
+                {/* ★ TEXT ABOVE CTAs */}
+                <div className="px-3 pb-3 pt-0">
+                  {/* (already showed rarity above; keep spacing consistent) */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <CardEbayCTA
+                      card={{
+                        id: c.id,
+                        name: c.name ?? c.id,
+                        set_code: setRow.id,
+                        set_name: setRow.name ?? setRow.id,
+                      }}
+                      game="Pokémon TCG"
+                      compact
+                    />
+                    <CardAmazonCTA
+                      card={{
+                        id: c.id,
+                        name: c.name ?? c.id,
+                        set_code: setRow.id,
+                        set_name: setRow.name ?? setRow.id,
+                      }}
+                      game="Pokémon TCG"
+                      compact
+                    />
+                  </div>
+                </div>
               </li>
             );
           })}

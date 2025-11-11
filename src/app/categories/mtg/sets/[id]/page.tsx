@@ -1,10 +1,14 @@
-// src/app/categories/mtg/sets/[id]/page.tsx
 import "server-only";
 import Link from "next/link";
 import Image from "next/image";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
+import CardGridTile from "@/components/CardGridTile";
+
+/* ★ Marketplace CTAs (set-level) */
+import CardAmazonCTA from "@/components/CardAmazonCTA";
+import CardEbayCTA from "@/components/CardEbayCTA";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,7 +66,7 @@ export default async function MtgSetDetailPage({
   const perPage = parsePerPage(searchParams?.perPage);
   const reqPage = parsePage(searchParams?.page);
 
-  // IMPORTANT: case-insensitive match on set code
+  // Case-insensitive match on set code
   const setRes = await db.execute<SetRow>(sql`
     SELECT
       code,
@@ -101,7 +105,6 @@ export default async function MtgSetDetailPage({
         (c.card_faces_raw->0->'image_uris'->>'large'),
         (c.card_faces_raw->0->'image_uris'->>'small')
       ) AS image_url,
-      -- Effective price snippet
       e.effective_usd::text      AS price_usd,
       TO_CHAR(e.effective_updated_at, 'YYYY-MM-DD') AS price_updated
     FROM public.mtg_cards c
@@ -130,7 +133,32 @@ export default async function MtgSetDetailPage({
               .filter(Boolean)
               .join(" • ")}
           </div>
+
+          {/* Set-level CTAs (outside links, no unsupported props) */}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <CardEbayCTA
+              card={{
+                id: s.code,
+                name: s.name ?? s.code,
+                number: null,
+                set_code: s.code,
+                set_name: s.name ?? s.code,
+              }}
+              game="Magic The Gathering"
+            />
+            <CardAmazonCTA
+              card={{
+                id: s.code,
+                name: s.name ?? s.code,
+                number: null,
+                set_code: s.code,
+                set_name: s.name ?? s.code,
+              }}
+              game="Magic The Gathering"
+            />
+          </div>
         </div>
+
         <Link href="/categories/mtg/sets" className="text-sky-300 hover:underline">
           ← All MTG sets
         </Link>
@@ -144,39 +172,36 @@ export default async function MtgSetDetailPage({
         <>
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {cardsRes.rows.map((c) => {
-              const img =
-                (c.image_url ?? "").replace(/^http:\/\//, "https://") || "/placeholder.svg";
+              const img = (c.image_url ?? "").replace(/^http:\/\//, "https://") || null;
               const href = `/categories/mtg/cards/${encodeURIComponent(c.id)}`;
+
               return (
-                <li
+                <CardGridTile
                   key={c.id}
-                  className="rounded-xl border border-white/10 bg-white/5 overflow-hidden hover:bg-white/10 hover:border-white/20 transition"
-                >
-                  <Link href={href} className="block">
-                    <div className="relative w-full" style={{ aspectRatio: "3 / 4" }}>
-                      <Image
-                        src={img}
-                        alt={c.name ?? c.id}
-                        fill
-                        unoptimized
-                        className="object-contain"
-                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                      />
+                  href={href}
+                  imageUrl={img}
+                  title={c.name ?? c.id}
+                  // text ABOVE buttons:
+                  subtitleLeft={[c.rarity ?? "", c.number ?? ""].filter(Boolean).join(" • ") || null}
+                  // price line under subtitle:
+                  extra={
+                    <div className="text-xs text-white/60">
+                      {c.price_usd ? `$${c.price_usd}` : "—"}
+                      {c.price_updated ? ` • ${c.price_updated}` : ""}
                     </div>
-                    <div className="p-3">
-                      <div className="line-clamp-2 text-sm font-medium text-white">
-                        {c.name ?? c.id}
-                      </div>
-                      <div className="mt-1 text-xs text-white/80">
-                        {[c.number ?? "", c.rarity ?? ""].filter(Boolean).join(" • ")}
-                      </div>
-                      <div className="mt-1 text-xs text-white/60">
-                        {c.price_usd ? `$${c.price_usd}` : "—"}
-                        {c.price_updated ? ` • ${c.price_updated}` : ""}
-                      </div>
-                    </div>
-                  </Link>
-                </li>
+                  }
+                  // buttons BELOW text:
+                  cta={{
+                    game: "Magic The Gathering",
+                    card: {
+                      id: c.id,
+                      name: c.name ?? "",
+                      number: c.number ?? undefined,
+                      set_code: s.code,
+                      set_name: s.name ?? undefined,
+                    },
+                  }}
+                />
               );
             })}
           </ul>
@@ -197,7 +222,9 @@ export default async function MtgSetDetailPage({
               >
                 ← Prev
               </Link>
-              <span className="px-2 text-white/80">Page {page} of {totalPages}</span>
+              <span className="px-2 text-white/80">
+                Page {page} of {totalPages}
+              </span>
               <Link
                 href={buildHref(`/categories/mtg/sets/${encodeURIComponent(s.code)}`, {
                   perPage,

@@ -1,8 +1,11 @@
+
 import "server-only";
 import Link from "next/link";
 import Image from "next/image";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import CardAmazonCTA from "@/components/CardAmazonCTA";
+import CardEbayCTA from "@/components/CardEbayCTA";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,7 +58,7 @@ export default async function PokemonCardsIndex({
   /** Next 15: searchParams is a Promise */
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams; // <-- KEY FIX
+  const sp = await searchParams;
   const baseHref = "/categories/pokemon/cards";
 
   const q: string | null = (sp?.q ?? "").trim() || null;
@@ -64,12 +67,10 @@ export default async function PokemonCardsIndex({
   const page: number = Math.max(1, reqPage);
   const offset: number = (page - 1) * perPage;
 
-  // WHERE
   const where = q
     ? sql`WHERE (name ILIKE ${"%" + q + "%"} OR rarity ILIKE ${"%" + q + "%"} OR id ILIKE ${"%" + q + "%"})`
     : sql``;
 
-  // COUNT
   const countSql = sql<{ count: number }>`
     SELECT COUNT(*)::int AS count
     FROM tcg_cards
@@ -81,7 +82,6 @@ export default async function PokemonCardsIndex({
   const safePage: number = Math.min(page, totalPages);
   const safeOffset: number = (safePage - 1) * Number(perPage);
 
-  // PAGE
   const rowsSql = sql<CardListRow>`
     SELECT id, name, rarity, set_name, set_id, small_image, large_image
     FROM tcg_cards
@@ -157,74 +157,95 @@ export default async function PokemonCardsIndex({
       </header>
 
       {/* grid */}
-{rows.length === 0 ? (
-  <div className="rounded-xl border border-white/15 bg-white/5 p-6 text-white/90 backdrop-blur-sm">
-    {q ? "No cards matched your search." : "No cards to display."}
-  </div>
-) : (
-  <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-    {rows.map((c) => {
-      const img = bestImg(c.small_image, c.large_image);
-      const cardHref = `/categories/pokemon/cards/${encodeURIComponent(c.id)}`;
-      const setHref = c.set_name
-        ? `/categories/pokemon/sets/${encodeURIComponent(c.set_name)}`
-        : c.set_id
-        ? `/categories/pokemon/sets/${encodeURIComponent(c.set_id)}`
-        : undefined;
+      {rows.length === 0 ? (
+        <div className="rounded-xl border border-white/15 bg-white/5 p-6 text-white/90 backdrop-blur-sm">
+          {q ? "No cards matched your search." : "No cards to display."}
+        </div>
+      ) : (
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          {rows.map((c) => {
+            const img = bestImg(c.small_image, c.large_image);
+            const cardHref = `/categories/pokemon/cards/${encodeURIComponent(c.id)}`;
+            const setHref = c.set_name
+              ? `/categories/pokemon/sets/${encodeURIComponent(c.set_name)}`
+              : c.set_id
+              ? `/categories/pokemon/sets/${encodeURIComponent(c.set_id)}`
+              : undefined;
 
-      return (
-        <li
-          key={String(c.id)}
-          className="rounded-xl border border-white/10 bg-white/5 overflow-hidden backdrop-blur-sm hover:bg-white/10 hover:border-white/20 transition"
-        >
-          <div className="flex flex-col h-full">
-            {/* Card link (image + title) */}
-            <Link href={cardHref} className="block group flex-1">
-              <div className="relative w-full" style={{ aspectRatio: "3 / 4" }}>
-                {img ? (
-                  <Image
-                    src={img}
-                    alt={c.name ?? c.id}
-                    fill
-                    unoptimized
-                    className="object-contain transition-transform group-hover:scale-[1.02]"
-                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                  />
-                ) : (
-                  <div className="absolute inset-0 grid place-items-center text-white/70">
-                    No image
-                  </div>
-                )}
-              </div>
-              <div className="p-3">
-                <div className="line-clamp-2 text-sm font-medium text-white group-hover:underline">
-                  {c.name ?? c.id}
-                </div>
-              </div>
-            </Link>
-
-            {/* Meta line with independent Set link (NOT nested inside the card link) */}
-            <div className="px-3 pb-3 pt-0 text-xs text-white/80">
-              {c.rarity ?? ""}
-              {setHref ? (
-                <>
-                  {" • "}
-                  <Link
-                    href={setHref}
-                    className="underline hover:no-underline"
-                  >
-                    {c.set_name ?? c.set_id}
+            return (
+              <li
+                key={String(c.id)}
+                className="rounded-xl border border-white/10 bg-white/5 overflow-hidden backdrop-blur-sm hover:bg-white/10 hover:border-white/20 transition"
+              >
+                <div className="flex flex-col h-full">
+                  {/* Card link (image + title) */}
+                  <Link href={cardHref} className="block group flex-1">
+                    <div className="relative w-full" style={{ aspectRatio: "3 / 4" }}>
+                      {img ? (
+                        <Image
+                          src={img}
+                          alt={c.name ?? c.id}
+                          fill
+                          unoptimized
+                          className="object-contain transition-transform group-hover:scale-[1.02]"
+                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 grid place-items-center text-white/70">
+                          No image
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <div className="line-clamp-2 text-sm font-medium text-white group-hover:underline">
+                        {c.name ?? c.id}
+                      </div>
+                    </div>
                   </Link>
-                </>
-              ) : null}
-            </div>
-          </div>
-        </li>
-      );
-    })}
-  </ul>
-)}
 
+                  {/* ★ TEXT ABOVE CTAs (meta first, then CTAs) */}
+                  <div className="px-3 pb-3 pt-0">
+                    <div className="text-xs text-white/80">
+                      {c.rarity ?? ""}
+                      {setHref ? (
+                        <>
+                          {" • "}
+                          <Link href={setHref} className="underline hover:no-underline">
+                            {c.set_name ?? c.set_id}
+                          </Link>
+                        </>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-2 flex items-center gap-2">
+                      <CardEbayCTA
+                        card={{
+                          id: c.id,
+                          name: c.name ?? c.id,
+                          set_code: c.set_id ?? null,
+                          set_name: c.set_name ?? null,
+                        }}
+                        game="Pokemon"
+                        compact
+                      />
+                      <CardAmazonCTA
+                        card={{
+                          id: c.id,
+                          name: c.name ?? c.id,
+                          set_code: c.set_id ?? null,
+                          set_name: c.set_name ?? null,
+                        }}
+                        game="Pokemon"
+                        compact
+                      />
+                    </div>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {/* pagination */}
       {total > perPage && (

@@ -1,45 +1,35 @@
+
 import "server-only";
 import Link from "next/link";
 import Image from "next/image";
-import { CF_ACCOUNT_HASH } from "@/lib/cf";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+
+/* ★ Marketplace CTAs */
+import CardAmazonCTA from "@/components/CardAmazonCTA";
+import CardEbayCTA from "@/components/CardEbayCTA";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/* ---------- Types ---------- */
-type SetRow = {
-  id: string;              // canonical set_name
-  name: string | null;     // set_name
-  series: string | null;
-  ptcgo_code?: string | null;
-  release_date: string | null;
-  logo_url: string | null;
-  symbol_url: string | null;
-};
-
-type ItemRow = {
-  id: string;              // ygo_cards.card_id
-  name: string | null;
-  rarity: string | null;
-  small_image: string | null;
-  large_image: string | null;
-};
-
 type SearchParams = Record<string, string | string[] | undefined>;
 
-/* ---------- Constants / helpers ---------- */
-const CATEGORY = {
-  label: "Yu-Gi-Oh!",
-  baseListHref: "/categories/yugioh/sets",
-  bannerCfId: "87101a20-6ada-4b66-0057-2d210feb9d00",
+type SetHeader = {
+  name: string;
+  any_small: string | null;
+  any_large: string | null;
+  sample_code: string | null;
+};
+
+type CardRow = {
+  id: string;
+  name: string | null;
+  rarity: string | null;
+  small: string | null;
+  large: string | null;
 };
 
 const PER_PAGE_OPTIONS = [30, 60, 120, 240] as const;
-
-const cfImageUrl = (id: string, variant = "categoryThumb") =>
-  `https://imagedelivery.net/${CF_ACCOUNT_HASH}/${id}/${variant}`;
 
 function parsePerPage(v?: string | string[]) {
   const s = Array.isArray(v) ? v[0] : v;
@@ -57,121 +47,36 @@ function parseBool(v?: string | string[]) {
 }
 function buildHref(
   base: string,
-  qs: { q?: string | null; page?: number; perPage?: number; rares?: boolean; holo?: boolean }
+  qs: { q?: string | null; page?: number; perPage?: number; rares?: boolean }
 ) {
   const p = new URLSearchParams();
   if (qs.q) p.set("q", qs.q);
   if (qs.page) p.set("page", String(qs.page));
   if (qs.perPage) p.set("perPage", String(qs.perPage));
   if (qs.rares) p.set("rares", "1");
-  if (qs.holo) p.set("holo", "1");
   const s = p.toString();
   return s ? `${base}?${s}` : base;
 }
-function bestImg(i: ItemRow): string | null {
-  if (i.large_image) return i.large_image;
-  if (i.small_image) return i.small_image;
-  return null;
+function bestImg(r: { small: string | null; large: string | null }) {
+  return r.large || r.small || null;
 }
 
-/* ---------- Data ---------- */
-/** Resolve a route param (which might be a set_name or an old set_code) to the canonical set_name. */
-async function getSet(param: string): Promise<SetRow | null> {
-  const nameGuess = param.replace(/-/g, " ").trim();
-  const likeGuess = `%${nameGuess}%`;
-
-  const row =
-    (
-      await db.execute<SetRow>(sql`
-        WITH base AS (
-          SELECT
-            s.set_name AS id,
-            s.set_name AS name,
-            NULL::text AS series,
-            NULL::text AS ptcgo_code,
-            NULL::text AS release_date,
-            MIN(img.image_url_small) AS logo_url,
-            MIN(img.image_url)       AS symbol_url
-          FROM ygo_card_sets s
-          LEFT JOIN ygo_card_images img ON img.card_id = s.card_id
-          WHERE
-               lower(s.set_name) = lower(${nameGuess})     -- exact name
-            OR s.set_name ILIKE ${likeGuess}               -- fuzzy name
-            OR s.set_code = ${param}                       -- backward compat (old URLs by code)
-          GROUP BY s.set_name
-        )
-        SELECT *
-        FROM base
-        ORDER BY
-          CASE
-            WHEN lower(id) = lower(${nameGuess}) THEN 0
-            ELSE 1
-          END,
-          id ASC
-        LIMIT 1
-      `)
-    ).rows?.[0] ?? null;
-
+async function getHeader(setName: string): Promise<SetHeader | null> {
+  const rs = await db.execute<SetHeader>(sql`
+    SELECT
+      ${setName}::text AS name,
+      MIN(img.image_url_small) AS any_small,
+      MIN(img.image_url) AS any_large,
+      MIN(s.set_code) AS sample_code
+    FROM ygo_card_sets s
+    LEFT JOIN ygo_card_images img ON img.card_id = s.card_id
+    WHERE s.set_name = ${setName}
+  `);
+  const row = rs.rows?.[0];
+  if (!row) return null;
   return row;
 }
 
-async function getItems(_opts: {
-  setName: string;        // canonical set_name
-  q: string | null;
-  offset: number;
-  limit: number;
-  raresOnly: boolean;
-  holoOnly: boolean;
-}): Promise<{ rows: ItemRow[]; total: number }> {
-  const conds = [sql`s.set_name = ${_opts.setName}`];
-
-  if (_opts.q) {
-    const like = `%${_opts.q}%`;
-    conds.push(sql`(c.name ILIKE ${like} OR c.card_id ILIKE ${like})`);
-  }
-
-  if (_opts.raresOnly && _opts.holoOnly) {
-    conds.push(sql`(s.set_rarity ILIKE '%Rare%' AND (s.set_rarity ILIKE '%Holo%' OR s.set_rarity ILIKE '%Foil%'))`);
-  } else if (_opts.raresOnly) {
-    conds.push(sql`(s.set_rarity ILIKE '%Rare%')`);
-  } else if (_opts.holoOnly) {
-    conds.push(sql`(s.set_rarity ILIKE '%Holo%' OR s.set_rarity ILIKE '%Foil%')`);
-  }
-  const whereSql = sql.join(conds, sql` AND `);
-
-  const total =
-    (
-      await db.execute<{ count: number }>(sql`
-        SELECT COUNT(DISTINCT c.card_id)::int AS count
-        FROM ygo_cards c
-        JOIN ygo_card_sets s ON s.card_id = c.card_id
-        WHERE ${whereSql}
-      `)
-    ).rows?.[0]?.count ?? 0;
-
-  const rows =
-    (
-      await db.execute<ItemRow>(sql`
-        SELECT
-          c.card_id AS id,
-          c.name,
-          MIN(s.set_rarity) AS rarity,
-          COALESCE(MIN(img.image_url_small), MIN(img.image_url)) AS small_image,
-          COALESCE(MIN(img.image_url), MIN(img.image_url_small)) AS large_image
-        FROM ygo_cards c
-        JOIN ygo_card_sets s ON s.card_id = c.card_id
-        LEFT JOIN ygo_card_images img ON img.card_id = c.card_id
-        WHERE ${whereSql}
-        GROUP BY c.card_id, c.name
-        ORDER BY c.name ASC NULLS LAST, c.card_id ASC
-        LIMIT ${_opts.limit} OFFSET ${_opts.offset}
-      `)
-    ).rows ?? [];
-
-  return { rows, total };
-}
-
-/* ---------- Page ---------- */
 export default async function YugiohSetDetailPage({
   params,
   searchParams,
@@ -182,35 +87,77 @@ export default async function YugiohSetDetailPage({
   const { id: rawId } = await params;
   const sp = await searchParams;
 
-  const inputParam = decodeURIComponent(rawId ?? "").trim();
-  const setRow = await getSet(inputParam);
-  const canonicalSetName = setRow?.name ?? inputParam; // fall back to input if needed
-
-  const baseHref = `${CATEGORY.baseListHref}/${encodeURIComponent(canonicalSetName)}`;
+  const setName = decodeURIComponent(rawId ?? "").trim();
+  const baseHref = `/categories/yugioh/sets/${encodeURIComponent(setName)}`;
 
   const q = (Array.isArray(sp?.q) ? sp.q[0] : sp?.q)?.trim() || null;
   const perPage = parsePerPage(sp?.perPage);
   const reqPage = parsePage(sp?.page);
   const raresOnly = parseBool(sp?.rares);
-  const holoOnly = parseBool(sp?.holo);
 
-  const { rows, total } = await getItems({
-    setName: canonicalSetName,
-    q,
-    offset: (reqPage - 1) * perPage,
-    limit: perPage,
-    raresOnly,
-    holoOnly,
-  });
+  const header = await getHeader(setName);
+  if (!header) {
+    return (
+      <section className="space-y-4">
+        <h1 className="text-2xl font-bold text-white">Set not found</h1>
+        <p className="text-white/70 text-sm break-all">Looked up: <code>{setName}</code></p>
+        <Link href="/categories/yugioh/sets" className="text-sky-300 hover:underline">← Back to all sets</Link>
+      </section>
+    );
+  }
+
+  const filters = [sql`s.set_name = ${setName}`];
+  if (q) {
+    filters.push(sql`(c.name ILIKE ${"%" + q + "%"} OR c.card_id = ${q})`);
+  }
+  if (raresOnly) {
+    // catch-all for the many YGO rarities
+    filters.push(sql`(s.set_rarity ILIKE '%Rare%')`);
+  }
+  const where = sql.join(filters, sql` AND `);
+
+  const total =
+    (
+      await db.execute<{ count: number }>(sql`
+        SELECT COUNT(*)::int AS count
+        FROM ygo_card_sets s
+        JOIN ygo_cards c ON c.card_id = s.card_id
+        WHERE ${where}
+      `)
+    ).rows?.[0]?.count ?? 0;
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
   const page = Math.min(totalPages, reqPage);
   const offset = (page - 1) * perPage;
+
+  const rows =
+    (
+      await db.execute<CardRow>(sql`
+        SELECT
+          c.card_id AS id,
+          c.name,
+          s.set_rarity AS rarity,
+          im.image_url_small AS small,
+          im.image_url AS large
+        FROM ygo_card_sets s
+        JOIN ygo_cards c ON c.card_id = s.card_id
+        LEFT JOIN LATERAL (
+          SELECT i.image_url_small, i.image_url
+          FROM ygo_card_images i
+          WHERE i.card_id = c.card_id
+          ORDER BY (CASE WHEN i.image_url IS NOT NULL THEN 0 ELSE 1 END)
+          LIMIT 1
+        ) im ON TRUE
+        WHERE ${where}
+        ORDER BY c.name ASC
+        LIMIT ${perPage} OFFSET ${offset}
+      `)
+    ).rows ?? [];
+
   const from = total === 0 ? 0 : offset + 1;
   const to = Math.min(offset + perPage, total);
 
-  const banner =
-    setRow?.logo_url || setRow?.symbol_url || cfImageUrl(CATEGORY.bannerCfId);
+  const banner = header.any_large || header.any_small || null;
 
   return (
     <section className="space-y-6">
@@ -218,44 +165,53 @@ export default async function YugiohSetDetailPage({
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-4">
           <div className="relative h-20 w-36 shrink-0 rounded-lg bg-white/5 ring-1 ring-white/10 overflow-hidden">
-            <Image
-              src={banner}
-              alt={canonicalSetName}
-              fill
-              unoptimized
-              className="object-contain"
-              sizes="144px"
-              priority
-            />
+            {banner ? (
+              <Image
+                src={banner}
+                alt={header.name}
+                fill
+                unoptimized
+                className="object-contain"
+                sizes="144px"
+                priority
+              />
+            ) : (
+              <div className="absolute inset-0 grid place-items-center text-white/60 text-xs">
+                No image
+              </div>
+            )}
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white">
-              {CATEGORY.label}: {canonicalSetName}
-            </h1>
-            <div className="text-sm text-white/80">
-              Set browser & card index
+            <h1 className="text-2xl font-bold text-white">{header.name}</h1>
+            {header.sample_code && (
+              <div className="text-sm text-white/80">Example code: {header.sample_code}</div>
+            )}
+
+            {/* ★ Set-level CTAs */}
+            <div className="mt-2 flex flex-wrap gap-2">
+              <CardEbayCTA
+                card={{ id: header.name, name: header.name, set_name: header.name }}
+                game="Yu-Gi-Oh!"
+                variant="pill"
+              />
+              <CardAmazonCTA
+                card={{ id: header.name, name: header.name, set_name: header.name }}
+                game="Yu-Gi-Oh!"
+                variant="pill"
+              />
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <Link href={`${baseHref}/prices`} className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20">
-            View price overview →
-          </Link>
-          <Link href={CATEGORY.baseListHref} className="text-sky-300 hover:underline">
-            ← All {CATEGORY.label} sets
-          </Link>
-          <Link href="/categories" className="text-sky-300 hover:underline">
-            ← All categories
-          </Link>
-        </div>
+        <Link href="/categories/yugioh/sets" className="text-sky-300 hover:underline">
+          ← All sets
+        </Link>
       </div>
 
       {/* Toolbar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm text-white/80">
-          Showing {from}-{to} of {total} cards
-          {(q || raresOnly || holoOnly) && <span> (filtered)</span>}
+          Showing {from}-{to} of {total} cards{(q || raresOnly) && " (filtered)"}
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -263,32 +219,34 @@ export default async function YugiohSetDetailPage({
           <form action={baseHref} method="get" className="flex items-center gap-2">
             {q ? <input type="hidden" name="q" value={q} /> : null}
             {raresOnly ? <input type="hidden" name="rares" value="1" /> : null}
-            {holoOnly ? <input type="hidden" name="holo" value="1" /> : null}
             <input type="hidden" name="page" value="1" />
             <label htmlFor="pp" className="sr-only">Per page</label>
             <select id="pp" name="perPage" defaultValue={String(perPage)}
               className="rounded-md border border-white/20 bg-white/10 px-2 py-1 text-white">
               {PER_PAGE_OPTIONS.map((n) => (<option key={n} value={n}>{n}</option>))}
             </select>
-            <button type="submit" className="rounded-md border border-white/20 bg-white/10 px-2.5 py-1 text-white hover:bg-white/20">Apply</button>
+            <button type="submit" className="rounded-md border border-white/20 bg-white/10 px-2.5 py-1 text-white hover:bg-white/20">
+              Apply
+            </button>
           </form>
 
-          {/* Search */}
+          {/* Search within set */}
           <form action={baseHref} method="get" className="flex items-center gap-2">
             {raresOnly ? <input type="hidden" name="rares" value="1" /> : null}
-            {holoOnly ? <input type="hidden" name="holo" value="1" /> : null}
             <input type="hidden" name="perPage" value={String(perPage)} />
             <input type="hidden" name="page" value="1" />
             <input
               name="q"
               defaultValue={q ?? ""}
-              placeholder="Search cards (name/id)…"
+              placeholder="Search cards (name or exact ID)…"
               className="w-[240px] md:w-[320px] rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white placeholder:text-white/60 outline-none focus:ring-2 focus:ring-white/50"
             />
-            <button type="submit" className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/20">Search</button>
+            <button type="submit" className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/20">
+              Search
+            </button>
             {q && (
               <Link
-                href={buildHref(baseHref, { perPage, page: 1, rares: raresOnly, holo: holoOnly })}
+                href={buildHref(baseHref, { perPage, page: 1, rares: raresOnly })}
                 className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white hover:bg-white/15"
               >
                 Clear
@@ -296,7 +254,7 @@ export default async function YugiohSetDetailPage({
             )}
           </form>
 
-          {/* Toggles */}
+          {/* Rares toggle */}
           <form action={baseHref} method="get" className="flex items-center gap-3">
             {q ? <input type="hidden" name="q" value={q} /> : null}
             <input type="hidden" name="perPage" value={String(perPage)} />
@@ -304,10 +262,6 @@ export default async function YugiohSetDetailPage({
             <label className="inline-flex items-center gap-2 text-sm text-white/90">
               <input type="checkbox" name="rares" value="1" defaultChecked={raresOnly} />
               Rares+
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm text-white/90">
-              <input type="checkbox" name="holo" value="1" defaultChecked={holoOnly} />
-              Holo only
             </label>
             <button type="submit" className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20">
               Apply
@@ -319,28 +273,55 @@ export default async function YugiohSetDetailPage({
       {/* Cards grid */}
       {rows.length === 0 ? (
         <div className="rounded-xl border border-white/15 bg-white/5 p-6 text-white/90 backdrop-blur-sm">
-          {q || raresOnly || holoOnly ? "No cards matched your filters." : "No cards found in this set yet."}
+          {q || raresOnly ? "No cards matched your filters." : "No cards found in this set."}
         </div>
       ) : (
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {rows.map((c) => {
             const img = bestImg(c);
             return (
-              <li key={c.id} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden backdrop-blur-sm hover:bg-white/10 hover:border-white/20 transition">
+              <li
+                key={c.id}
+                className="rounded-xl border border-white/10 bg-white/5 overflow-hidden hover:bg-white/10 hover:border-white/20 transition"
+              >
                 <Link href={`/categories/yugioh/cards/${encodeURIComponent(c.id)}`} className="block">
                   <div className="relative w-full" style={{ aspectRatio: "3 / 4" }}>
                     {img ? (
-                      <Image src={img} alt={c.name ?? c.id} fill unoptimized className="object-contain"
-                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw" />
+                      <Image
+                        src={img}
+                        alt={c.name ?? c.id}
+                        fill
+                        unoptimized
+                        className="object-contain"
+                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                      />
                     ) : (
                       <div className="absolute inset-0 grid place-items-center text-white/70">No image</div>
                     )}
                   </div>
                   <div className="p-3">
-                    <div className="line-clamp-2 text-sm font-medium text-white">{c.name ?? c.id}</div>
+                    <div className="line-clamp-2 text-sm font-medium text-white">
+                      {c.name ?? c.id}
+                    </div>
                     <div className="mt-1 text-xs text-white/80">{c.rarity ?? ""}</div>
                   </div>
                 </Link>
+
+                {/* ★ TEXT ABOVE CTAs */}
+                <div className="px-3 pb-3 pt-0">
+                  <div className="mt-2 flex items-center gap-2">
+                    <CardEbayCTA
+                      card={{ id: c.id, name: c.name ?? c.id, set_name: header.name }}
+                      game="Yu-Gi-Oh!"
+                      compact
+                    />
+                    <CardAmazonCTA
+                      card={{ id: c.id, name: c.name ?? c.id, set_name: header.name }}
+                      game="Yu-Gi-Oh!"
+                      compact
+                    />
+                  </div>
+                </div>
               </li>
             );
           })}
@@ -351,17 +332,27 @@ export default async function YugiohSetDetailPage({
       {total > perPage && (
         <nav className="mt-4 flex items-center justify-center gap-2 text-sm">
           <Link
-            href={buildHref(baseHref, { q, perPage, rares: raresOnly, holo: holoOnly, page: Math.max(1, page - 1) })}
+            href={buildHref(baseHref, { q, perPage, rares: raresOnly, page: Math.max(1, page - 1) })}
             aria-disabled={page === 1}
-            className={`rounded-md border px-3 py-1 ${page === 1 ? "pointer-events-none border-white/10 text-white/40" : "border-white/20 text-white hover:bg-white/10"}`}
+            className={`rounded-md border px-3 py-1 ${
+              page === 1
+                ? "pointer-events-none border-white/10 text-white/40"
+                : "border-white/20 text-white hover:bg-white/10"
+            }`}
           >
             ← Prev
           </Link>
-          <span className="px-2 text-white/80">Page {page} of {totalPages}</span>
+          <span className="px-2 text-white/80">
+            Page {page} of {totalPages}
+          </span>
           <Link
-            href={buildHref(baseHref, { q, perPage, rares: raresOnly, holo: holoOnly, page: page + 1 })}
+            href={buildHref(baseHref, { q, perPage, rares: raresOnly, page: page + 1 })}
             aria-disabled={offset + perPage >= total}
-            className={`rounded-md border px-3 py-1 ${offset + perPage >= total ? "pointer-events-none border-white/10 text-white/40" : "border-white/20 text-white hover:bg-white/10"}`}
+            className={`rounded-md border px-3 py-1 ${
+              offset + perPage >= total
+                ? "pointer-events-none border-white/10 text-white/40"
+                : "border-white/20 text-white hover:bg-white/10"
+            }`}
           >
             Next →
           </Link>

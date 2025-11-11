@@ -1,4 +1,4 @@
-// src/app/categories/pokemon/cards/[id]/page.tsx
+
 import "server-only";
 import Image from "next/image";
 import Link from "next/link";
@@ -12,9 +12,14 @@ import { type DisplayCurrency, getFx } from "@/lib/pricing";
 import { getVendorPricesForCard } from "@/lib/vendorPrices";
 import { getLatestEbaySnapshot } from "@/lib/ebay";
 
+/* Plan + collection */
 import { auth } from "@clerk/nextjs/server";
 import { getUserPlan } from "@/lib/plans";
 import AddToCollectionButton from "@/components/AddToCollectionButton";
+
+/* ★ Marketplace CTAs */
+import CardAmazonCTA from "@/components/CardAmazonCTA";
+import CardEbayCTA from "@/components/CardEbayCTA";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,9 +72,9 @@ function normalizeImg(u?: string | null): string | null {
   if (!u) return null;
   let s = String(u).trim();
   if (!s) return null;
-  if (s.startsWith("//")) s = "https:" + s;          // protocol-relative → https
-  s = s.replace(/^http:\/\//i, "https://");          // force https
-  if (s.includes(" ")) s = s.replace(/ /g, "%20");   // encode spaces
+  if (s.startsWith("//")) s = "https:" + s;
+  s = s.replace(/^http:\/\//i, "https://");
+  if (s.includes(" ")) s = s.replace(/ /g, "%20");
   try {
     const url = new URL(s);
     return url.href;
@@ -244,7 +249,6 @@ export default async function PokemonCardDetailPage({
         )).rows ?? []
       : [];
 
-  // robust image (same behavior as YGO)
   const hero = normalizeImg(bestImg(card));
 
   const setHref = card.set_id
@@ -260,48 +264,25 @@ export default async function PokemonCardDetailPage({
 
   const fx = getFx();
 
-// Pull vendor prices (may be empty for some vendors today)
-const rawVendors = await getVendorPricesForCard("pokemon", card.id, [
-  "ebay",
-  "amazon",
-  "coolstuffinc",
-]);
+  const rawVendors = await getVendorPricesForCard("pokemon", card.id, [
+    "ebay",
+    "amazon",
+    "coolstuffinc",
+  ]);
 
-type VendorKey = "ebay" | "amazon" | "coolstuffinc";
-type VendorPrice = { value: number | null; currency: string; url: string | null };
+  const baseVendors = (rawVendors ?? {}) as Record<VendorKey, VendorPrice>;
 
-const baseVendors = (rawVendors ?? {}) as Record<VendorKey, VendorPrice>;
+  const vendors: Record<VendorKey, VendorPrice> = !baseVendors.ebay || baseVendors.ebay.value == null
+    ? {
+        ...baseVendors,
+        ebay: {
+          value: ebay?.median_cents != null ? ebay.median_cents / 100 : null,
+          currency: "USD",
+          url: baseVendors.ebay?.url ?? null,
+        },
+      }
+    : baseVendors;
 
-// If no eBay vendor price, fall back to snapshot median (USD)
-const vendors: Record<VendorKey, VendorPrice> = !baseVendors.ebay || baseVendors.ebay.value == null
-  ? {
-      ...baseVendors,
-      ebay: {
-        value: ebay?.median_cents != null ? ebay.median_cents / 100 : null,
-        currency: "USD",
-        url: baseVendors.ebay?.url ?? null,
-      },
-    }
-  : baseVendors;
-
-// Format vendor price in the chosen display currency
-const showVendorPrice = (v?: VendorPrice) => {
-  if (!v || v.value == null) return "—";
-
-  if (display === "EUR") {
-    if (v.currency === "EUR") return `€${v.value.toFixed(2)}`;
-    if (v.currency === "USD" && fx.usdToEur) return `€${(v.value * fx.usdToEur).toFixed(2)}`;
-  }
-  if (display === "USD") {
-    if (v.currency === "USD") return `$${v.value.toFixed(2)}`;
-    if (v.currency === "EUR" && fx.eurToUsd) return `$${(v.value * fx.eurToUsd).toFixed(2)}`;
-  }
-
-  const sym = v.currency === "EUR" ? "€" : "$";
-  return `${sym}${v.value.toFixed(2)}`;
-};
-
-  // Fallback to eBay snapshot if vendor service had nothing
   if (!vendors.ebay || vendors.ebay.value == null) {
     vendors.ebay = {
       value: ebay?.median_cents != null ? ebay.median_cents / 100 : null,
@@ -310,24 +291,19 @@ const showVendorPrice = (v?: VendorPrice) => {
     };
   }
 
+  const hasTcgHistory =
+    (
+      await db.execute(
+        sql`SELECT 1 FROM tcg_card_prices_tcgplayer WHERE card_id = ${card.id} LIMIT 1`
+      )
+    ).rows.length > 0;
 
-
-// ----- History gates to avoid <!DOCTYPE…> errors when empty -----
-const hasTcgHistory =
-  (
-    await db.execute(
-      sql`SELECT 1 FROM tcg_card_prices_tcgplayer WHERE card_id = ${card.id} LIMIT 1`
-    )
-  ).rows.length > 0;
-
-const hasCmkHistory =
-  (
-    await db.execute(
-      sql`SELECT 1 FROM tcg_card_prices_cardmarket WHERE card_id = ${card.id} LIMIT 1`
-    )
-  ).rows.length > 0;
-
-
+  const hasCmkHistory =
+    (
+      await db.execute(
+        sql`SELECT 1 FROM tcg_card_prices_cardmarket WHERE card_id = ${card.id} LIMIT 1`
+      )
+    ).rows.length > 0;
 
   const moneyFromUsdCents = (cents?: number | null) => {
     if (cents == null) return "—";
@@ -336,6 +312,20 @@ const hasCmkHistory =
       return `€${eur.toFixed(2)}`;
     }
     return `$${(cents / 100).toFixed(2)}`;
+  };
+
+  const showVendorPrice = (v?: VendorPrice) => {
+    if (!v || v.value == null) return "—";
+    if (display === "EUR") {
+      if (v.currency === "EUR") return `€${v.value.toFixed(2)}`;
+      if (v.currency === "USD" && fx.usdToEur) return `€${(v.value * fx.usdToEur).toFixed(2)}`;
+    }
+    if (display === "USD") {
+      if (v.currency === "USD") return `$${v.value.toFixed(2)}`;
+      if (v.currency === "EUR" && fx.eurToUsd) return `$${(v.value * fx.eurToUsd).toFixed(2)}`;
+    }
+    const sym = v.currency === "EUR" ? "€" : "$";
+    return `${sym}${v.value.toFixed(2)}`;
   };
 
   const { userId } = await auth();
@@ -358,7 +348,7 @@ const hasCmkHistory =
         {/* Left: large card image */}
         <div className="lg:col-span-5">
           <div className="rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur-sm">
-            <div className="relative mx-auto aspect-3/4 w-full max-w-md">
+            <div className="relative mx-auto w-full max-w-md" style={{ aspectRatio: "3 / 4" }}>
               {hero ? (
                 <Image
                   src={hero}
@@ -420,8 +410,8 @@ const hasCmkHistory =
               )}
             </div>
 
-            {/* quick facts */}
-            <div className="mt-4 text-sm text-white/70">
+            {/* ★ Move quick facts ABOVE the CTAs (text above CTAs) */}
+            <div className="mt-3 text-sm text-white/70">
               {[
                 card.series || undefined,
                 card.ptcgo_code ? `PTCGO: ${card.ptcgo_code}` : undefined,
@@ -429,6 +419,30 @@ const hasCmkHistory =
               ]
                 .filter(Boolean)
                 .join(" • ")}
+            </div>
+
+            {/* Marketplaces (below text) */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <CardEbayCTA
+                card={{
+                  id: card.id,
+                  name: card.name ?? card.id,
+                  set_code: card.set_id ?? null,
+                  set_name: card.set_name ?? null,
+                }}
+                game="Pokémon TCG"
+                variant="pill"
+              />
+              <CardAmazonCTA
+                card={{
+                  id: card.id,
+                  name: card.name ?? card.id,
+                  set_code: card.set_id ?? null,
+                  set_name: card.set_name ?? null,
+                }}
+                game="Pokémon TCG"
+                variant="pill"
+              />
             </div>
 
             {/* legality chips */}
@@ -554,42 +568,37 @@ const hasCmkHistory =
         </div>
       </div>
 
-{/* mini trend glances (only if we have data; prevents <!DOCTYPE…> JSON errors) */}
-{(hasTcgHistory || hasCmkHistory) ? (
-  <section className="grid gap-3 md:grid-cols-2">
-    {/* TCGplayer sparkline */}
-    {hasTcgHistory && (
-      <PriceSparkline
-        category="pokemon"
-        cardId={card.id}
-        market="TCGplayer"  // Title-case to satisfy union type
-        keyName="normal"
-        days={30}
-        display={display}
-        label="TCGplayer • Normal (30d)"
-      />
-    )}
-
-    {/* Cardmarket sparkline */}
-    {hasCmkHistory && (
-      <PriceSparkline
-        category="pokemon"
-        cardId={card.id}
-        market="Cardmarket" // Title-case
-        keyName="trend_price"
-        days={30}
-        display={display}
-        label="Cardmarket • Trend (30d)"
-      />
-    )}
-  </section>
-) : (
-  // Graceful placeholder when there is no history for this card
-  <div className="rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur-sm text-white/70">
-    No price history yet for this card.
-  </div>
-)}
-
+      {/* mini trend glances */}
+      {(hasTcgHistory || hasCmkHistory) ? (
+        <section className="grid gap-3 md:grid-cols-2">
+          {hasTcgHistory && (
+            <PriceSparkline
+              category="pokemon"
+              cardId={card.id}
+              market="TCGplayer"
+              keyName="normal"
+              days={30}
+              display={display}
+              label="TCGplayer • Normal (30d)"
+            />
+          )}
+          {hasCmkHistory && (
+            <PriceSparkline
+              category="pokemon"
+              cardId={card.id}
+              market="Cardmarket"
+              keyName="trend_price"
+              days={30}
+              display={display}
+              label="Cardmarket • Trend (30d)"
+            />
+          )}
+        </section>
+      ) : (
+        <div className="rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur-sm text-white/70">
+          No price history yet for this card.
+        </div>
+      )}
 
       {/* FX note if converting */}
       {display !== "NATIVE" && (fx.usdToEur != null || fx.eurToUsd != null) && (

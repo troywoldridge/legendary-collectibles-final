@@ -40,6 +40,17 @@ export default function Footer() {
               <li><Link href="/categories/mtg" className="hover:text-white">Magic: The Gathering</Link></li>
               <li><Link href="/categories/funko" className="hover:text-white">Funko Pop</Link></li>
               <li><Link href="/search" className="hover:text-white">All Products</Link></li>
+              {/* ★ Temporary Amazon link */}
+              <li>
+                <a
+                  href="https://amzn.to/3JUSPsT"
+                  target="_blank"
+                  rel="nofollow sponsored noopener noreferrer"
+                  className="hover:text-white"
+                >
+                  Amazon Deals
+                </a>
+              </li>
             </ul>
           </div>
 
@@ -102,8 +113,14 @@ export default function Footer() {
           </div>
         </div>
 
+        {/* DISCLOSURES */}
+        <div className="mt-8 space-y-1 text-xs text-neutral-400">
+          <p>As an Amazon Associate I earn from qualifying purchases.</p>
+          <p>As an eBay Partner, we may be compensated if you make a purchase.</p>
+        </div>
+
         {/* BOTTOM ROW */}
-        <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-6 text-sm text-neutral-400 sm:flex-row">
+        <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-6 text-sm text-neutral-400 sm:flex-row">
           <p>© {year} {site.name}. All rights reserved.</p>
           <p>
             Built with <span className="text-pink-400">❤</span> using{" "}

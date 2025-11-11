@@ -1,8 +1,13 @@
+
 import "server-only";
 import Link from "next/link";
 import Image from "next/image";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+
+/* ★ Marketplace CTAs */
+import CardAmazonCTA from "@/components/CardAmazonCTA";
+import CardEbayCTA from "@/components/CardEbayCTA";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,11 +21,7 @@ type SetItem = {
   symbol_url: string | null;
 };
 
-const CATEGORY = {
-  label: "Yu-Gi-Oh!",
-  baseHref: "/categories/yugioh/sets",
-};
-
+const BASE = "/categories/yugioh/sets";
 const PER_PAGE_OPTIONS = [30, 60, 120, 240] as const;
 
 function parsePerPage(v?: string | string[]) {
@@ -46,7 +47,6 @@ async function getSets(opts: { q: string | null; offset: number; limit: number }
   const filters = [sql`1=1`];
   if (opts.q) {
     const like = `%${opts.q}%`;
-    // allow searching by name or code, but we group by name
     filters.push(sql`(s.set_name ILIKE ${like} OR s.set_code ILIKE ${like})`);
   }
   const where = sql.join(filters, sql` AND `);
@@ -81,9 +81,12 @@ async function getSets(opts: { q: string | null; offset: number; limit: number }
   return { rows, total };
 }
 
-export default async function YugiohSetsIndex({ searchParams }: { searchParams: Promise<SearchParams> }) {
+export default async function YugiohSetsIndex({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
   const sp = await searchParams;
-  const baseHref = CATEGORY.baseHref;
 
   const q = (Array.isArray(sp?.q) ? sp.q[0] : sp?.q)?.trim() || null;
   const perPage = parsePerPage(sp?.perPage);
@@ -103,11 +106,17 @@ export default async function YugiohSetsIndex({ searchParams }: { searchParams: 
         <h1 className="text-2xl font-bold text-white">Yu-Gi-Oh! Sets</h1>
 
         <div className="flex flex-wrap gap-3">
-          <form action={baseHref} method="get" className="flex items-center gap-2">
+          {/* Per page */}
+          <form action={BASE} method="get" className="flex items-center gap-2">
             {q ? <input type="hidden" name="q" value={q} /> : null}
             <input type="hidden" name="page" value="1" />
             <label htmlFor="pp" className="sr-only">Per page</label>
-            <select id="pp" name="perPage" defaultValue={String(perPage)} className="rounded-md border border-white/20 bg-white/10 px-2 py-1 text-white">
+            <select
+              id="pp"
+              name="perPage"
+              defaultValue={String(perPage)}
+              className="rounded-md border border-white/20 bg-white/10 px-2 py-1 text-white"
+            >
               {PER_PAGE_OPTIONS.map((n) => (<option key={n} value={n}>{n}</option>))}
             </select>
             <button className="rounded-md border border-white/20 bg-white/10 px-2.5 py-1 text-white hover:bg-white/20">
@@ -115,7 +124,8 @@ export default async function YugiohSetsIndex({ searchParams }: { searchParams: 
             </button>
           </form>
 
-          <form action={baseHref} method="get" className="flex items-center gap-2">
+          {/* Search */}
+          <form action={BASE} method="get" className="flex items-center gap-2">
             <input type="hidden" name="perPage" value={String(perPage)} />
             <input type="hidden" name="page" value="1" />
             <input
@@ -128,7 +138,10 @@ export default async function YugiohSetsIndex({ searchParams }: { searchParams: 
               Search
             </button>
             {q && (
-              <Link href={buildHref(baseHref, { perPage, page: 1 })} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white hover:bg-white/15">
+              <Link
+                href={buildHref(BASE, { perPage, page: 1 })}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white hover:bg-white/15"
+              >
                 Clear
               </Link>
             )}
@@ -136,39 +149,95 @@ export default async function YugiohSetsIndex({ searchParams }: { searchParams: 
         </div>
       </div>
 
-      <div className="text-sm text-white/80">Showing {from}-{to} of {total} sets{q ? " (filtered)" : ""}</div>
+      <div className="text-sm text-white/80">
+        Showing {from}-{to} of {total} sets{q ? " (filtered)" : ""}
+      </div>
 
+      {/* Grid */}
       {rows.length === 0 ? (
-        <div className="rounded-xl border border-white/15 bg-white/5 p-6 text-white/90 backdrop-blur-sm">No sets yet — run the YGO sync first.</div>
+        <div className="rounded-xl border border-white/15 bg-white/5 p-6 text-white/90 backdrop-blur-sm">
+          No sets yet — run the YGO sync first.
+        </div>
       ) : (
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {rows.map((s) => {
             const img = s.logo_url || s.symbol_url || null;
             return (
-              <li key={s.id} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden hover:bg-white/10 hover:border-white/20 transition">
+              <li
+                key={s.id}
+                className="rounded-xl border border-white/10 bg-white/5 overflow-hidden hover:bg-white/10 hover:border-white/20 transition"
+              >
                 <Link href={`/categories/yugioh/sets/${encodeURIComponent(s.id)}`} className="block">
-                  <div className="relative w-full" style={{ aspectRatio: "4 / 3" }}>
+                  <div className="relative w-full" style={{ aspectRatio: "16 / 9" }}>
                     {img ? (
-                      <Image src={img} alt={s.name ?? s.id} fill unoptimized className="object-contain" sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw" />
+                      <Image
+                        src={img}
+                        alt={s.name ?? s.id}
+                        fill
+                        unoptimized
+                        className="object-contain"
+                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                      />
                     ) : (
-                      <div className="absolute inset-0 grid place-items-center text-white/70">No image</div>
+                      <div className="absolute inset-0 grid place-items-center text-white/70">
+                        No image
+                      </div>
                     )}
                   </div>
                   <div className="p-3">
-                    <div className="line-clamp-2 text-sm font-medium text-white">{s.name ?? s.id}</div>
+                    <div className="line-clamp-2 text-sm font-medium text-white">
+                      {s.name ?? s.id}
+                    </div>
                   </div>
                 </Link>
+
+                {/* ★ TEXT ABOVE CTAs (name already shown) */}
+                <div className="px-3 pb-3 pt-0">
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <CardEbayCTA
+                      card={{ id: s.id, name: s.name ?? s.id, set_name: s.name ?? s.id }}
+                      game="Yu-Gi-Oh!"
+                      variant="pill"
+                    />
+                    <CardAmazonCTA
+                      card={{ id: s.id, name: s.name ?? s.id, set_name: s.name ?? s.id }}
+                      game="Yu-Gi-Oh!"
+                      variant="pill"
+                    />
+                  </div>
+                </div>
               </li>
             );
           })}
         </ul>
       )}
 
+      {/* Pagination */}
       {total > perPage && (
         <nav className="mt-4 flex items-center justify-center gap-2 text-sm">
-          <Link href={buildHref(baseHref, { q, perPage, page: Math.max(1, page - 1) })} aria-disabled={page === 1} className={`rounded-md border px-3 py-1 ${page === 1 ? "pointer-events-none border-white/10 text-white/40" : "border-white/20 text-white hover:bg-white/10"}`}>← Prev</Link>
+          <Link
+            href={buildHref(BASE, { q, perPage, page: Math.max(1, page - 1) })}
+            aria-disabled={page === 1}
+            className={`rounded-md border px-3 py-1 ${
+              page === 1
+                ? "pointer-events-none border-white/10 text-white/40"
+                : "border-white/20 text-white hover:bg-white/10"
+            }`}
+          >
+            ← Prev
+          </Link>
           <span className="px-2 text-white/80">Page {page} of {totalPages}</span>
-          <Link href={buildHref(baseHref, { q, perPage, page: page + 1 })} aria-disabled={offset + perPage >= total} className={`rounded-md border px-3 py-1 ${offset + perPage >= total ? "pointer-events-none border-white/10 text-white/40" : "border-white/20 text-white hover:bg-white/10"}`}>Next →</Link>
+          <Link
+            href={buildHref(BASE, { q, perPage, page: page + 1 })}
+            aria-disabled={offset + perPage >= total}
+            className={`rounded-md border px-3 py-1 ${
+              offset + perPage >= total
+                ? "pointer-events-none border-white/10 text-white/40"
+                : "border-white/20 text-white hover:bg-white/10"
+            }`}
+          >
+            Next →
+          </Link>
         </nav>
       )}
     </section>

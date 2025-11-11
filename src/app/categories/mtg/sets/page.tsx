@@ -1,10 +1,13 @@
-// src/app/categories/mtg/sets/page.tsx
 import "server-only";
 import Link from "next/link";
 import Image from "next/image";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { CF_ACCOUNT_HASH } from "@/lib/cf";
+
+/* ★ Marketplace CTAs */
+import CardAmazonCTA from "@/components/CardAmazonCTA";
+import CardEbayCTA from "@/components/CardEbayCTA";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -168,25 +171,46 @@ export default async function MtgSetsIndex({ searchParams }: { searchParams: Pro
               banner;
             const href = `${CATEGORY.baseHref}/${encodeURIComponent(s.id)}`;
             return (
-              <li key={s.id} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden hover:bg-white/10 hover:border-white/20 transition">
-                <Link href={href} className="block">
-                  <div className="relative w-full" style={{ aspectRatio: "4 / 3" }}>
-                    <Image
-                      src={img}
-                      alt={s.name ?? s.id}
-                      fill
-                      unoptimized
-                      className="object-contain"
-                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                    />
-                  </div>
-                  <div className="p-3">
-                    <div className="line-clamp-2 text-sm font-medium text-white">{s.name ?? s.id}</div>
-                    <div className="mt-1 text-xs text-white/80">{[s.id, s.released_at ?? undefined, s.set_type ?? undefined].filter(Boolean).join(" • ")}</div>
-                    {s.block && <div className="mt-0.5 text-[11px] text-white/60 line-clamp-1">{s.block}</div>}
-                  </div>
-                </Link>
-              </li>
+             // …imports unchanged (no CardGridTile needed here) …
+
+// inside the map:
+<li key={s.id} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden hover:bg-white/10 hover:border-white/20 transition">
+  {/* Click-through to set page */}
+  <Link href={href} className="block">
+    <div className="relative w-full" style={{ aspectRatio: "4 / 3" }}>
+      <Image
+        src={img}
+        alt={s.name ?? s.id}
+        fill
+        unoptimized
+        className="object-contain"
+        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+      />
+    </div>
+    <div className="p-3">
+      <div className="line-clamp-2 text-sm font-medium text-white">{s.name ?? s.id}</div>
+      <div className="mt-1 text-xs text-white/80">
+        {[s.id, s.released_at ?? undefined, s.set_type ?? undefined].filter(Boolean).join(" • ")}
+      </div>
+      {s.block && <div className="mt-0.5 text-[11px] text-white/60 line-clamp-1">{s.block}</div>}
+    </div>
+  </Link>
+
+  {/* ★ CTAs (outside the Link, below the text) */}
+  <div className="px-3 pb-3 pt-0.5">
+    <div className="flex flex-wrap gap-2">
+      <CardEbayCTA
+        card={{ id: s.id, name: s.name ?? s.id, set_code: s.id, set_name: s.name ?? s.id }}
+        game="Magic The Gathering"
+      />
+      <CardAmazonCTA
+        card={{ id: s.id, name: s.name ?? s.id, set_code: s.id, set_name: s.name ?? s.id }}
+        game="Magic The Gathering"
+      />
+    </div>
+  </div>
+</li>
+
             );
           })}
         </ul>

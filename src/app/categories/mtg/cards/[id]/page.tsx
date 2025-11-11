@@ -12,6 +12,10 @@ import { auth } from "@clerk/nextjs/server";
 import { getUserPlan } from "@/lib/plans";
 import AddToCollectionButton from "@/components/AddToCollectionButton";
 
+/* ★ NEW: Marketplace CTAs */
+import CardAmazonCTA from "@/components/CardAmazonCTA";
+import CardEbayCTA from "@/components/CardEbayCTA";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -344,23 +348,48 @@ export default async function MtgCardDetailPage({
 
         <ManaCost cost={card.mana_cost} />
 
-        {/* collection tracker */}
-        <div className="mt-1">
-          {canSave ? (
-            <AddToCollectionButton
-              game="mtg"
-              cardId={card.id}
-              cardName={card.name}
-              setName={setRow?.name ?? card.set_name}
-              number={card.collector_number}
-              imageUrl={hero}
-            />
-          ) : (
-            <Link href="/pricing" className="inline-block px-3 py-2 rounded bg-amber-500 text-white hover:bg-amber-600">
-              Upgrade to track your collection
-            </Link>
-          )}
-        </div>
+      {/* collection tracker */}
+<div className="mt-1">
+  {canSave ? (
+    <AddToCollectionButton
+      game="mtg"
+      cardId={card.id}
+      cardName={card.name}
+      setName={setRow?.name ?? card.set_name ?? undefined}
+      number={card.collector_number ?? undefined}
+      imageUrl={hero ?? undefined}
+    />
+  ) : (
+    <Link href="/pricing" className="inline-block px-3 py-2 rounded bg-amber-500 text-white hover:bg-amber-600">
+      Upgrade to track your collection
+    </Link>
+  )}
+</div>
+
+{/* Marketplace CTAs (keep outside of any <Link>) */}
+<div className="flex flex-wrap gap-2 pt-2">
+  <CardEbayCTA
+    card={{
+      id: card.id,
+      name: card.name ?? "",
+      number: card.collector_number ?? undefined,
+      set_code: card.set_code ?? undefined,
+      set_name: setRow?.name ?? card.set_name ?? undefined,
+    }}
+    game="Magic The Gathering"
+  />
+  <CardAmazonCTA
+    card={{
+      id: card.id,
+      name: card.name ?? "",
+      number: card.collector_number ?? undefined,
+      set_code: card.set_code ?? undefined,
+      set_name: setRow?.name ?? card.set_name ?? undefined,
+    }}
+    game="Magic The Gathering"
+  />
+</div>
+
 
         {/* prices (primary) */}
         {hasPrimaryPrice && (

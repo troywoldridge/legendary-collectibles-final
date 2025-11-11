@@ -32,7 +32,6 @@
     "cron:mtg:scryfall": "node scripts/cron/updateMtgPrices.scryfall.mjs",
     "cron:ygo": "node scripts/cron/updateYgoPrices.mjs",
     "cron:pokemon": "node scripts/cron/updatePokemonPrices.mjs",
-
     "// ebay — MTG": "",
     "cron:ebay:mtg": "node scripts/cron/fetchMtgEbayPrices.mjs --only-missing-primary --only-missing-ebay --days=7 --limit=0 --batch=800 --concurrency=4",
     "cron:ebay:mtg:all": "node scripts/cron/fetchMtgEbayPrices.mjs --all --limit=0 --batch=800 --concurrency=4",
@@ -40,18 +39,15 @@
     "prices:ebay:mtg": "node scripts/cron/fetchMtgEbayPrices.mjs --all --limit=0 --batch=800 --concurrency=4",
     "prices:ebay:pokemon": "node scripts/cron/fetchPkmnEbayPrices.mjs --all --limit=0 --batch=800 --concurrency=4",
     "prices:ebay:ygo": "node scripts/cron/fetchYgoEbayPrices.mjs --all --limit=0 --batch=800 --concurrency=4",
-    
-    
-
-    "// orchestrator — runs all four sequentially": "",
     "prices:all": "node scripts/cron/runAllPrices.mjs"
-
   },
   "dependencies": {
     "@clerk/nextjs": "^6.34.5",
     "@neondatabase/serverless": "^1.0.2",
+    "aws4": "^1.13.2",
     "cheerio": "^1.1.2",
     "cli-progress": "^3.12.0",
+    "clsx": "^2.1.1",
     "fast-xml-parser": "^5.3.0",
     "framer-motion": "^12.23.24",
     "imghash": "^1.1.0",

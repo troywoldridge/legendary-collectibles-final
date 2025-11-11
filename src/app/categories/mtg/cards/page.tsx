@@ -4,19 +4,20 @@ import Image from "next/image";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { unstable_noStore as noStore } from "next/cache";
+import CardAmazonCTA from "@/components/CardAmazonCTA";
+import CardEbayCTA from "@/components/CardEbayCTA";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
-export const fetchCache = "force-no-store";
 
+/* ---------------- Types ---------------- */
 type SearchParams = Record<string, string | string[] | undefined>;
 
 type CardThumb = {
   id: string;
   name: string | null;
-  number: string | null;
-  image_url: string | null;
+  number: string | null;       // collector_number
+  image_url: string | null;    // derived
   set_code: string | null;
   rarity: string | null;
   type_line: string | null;
@@ -24,6 +25,7 @@ type CardThumb = {
   price_updated: string | null;
 };
 
+/* ---------------- UI Constants ---------------- */
 const PER_PAGE_OPTIONS = [30, 60, 120, 240] as const;
 const COLOR_OPTS = ["White", "Blue", "Black", "Red", "Green", "Colorless"] as const;
 const TYPE_OPTS = ["Artifact","Creature","Enchantment","Instant","Land","Planeswalker","Sorcery","Tribal"] as const;
@@ -41,7 +43,7 @@ const COLOR_CODE: Record<(typeof COLOR_OPTS)[number], string> = {
   White: "W", Blue: "U", Black: "B", Red: "R", Green: "G", Colorless: "",
 };
 
-/* ---------------- helpers ---------------- */
+/* ---------------- Helpers ---------------- */
 // take the LAST value if an array shows up (clicked submit button is last)
 function lastVal(v?: string | string[]) {
   if (Array.isArray(v)) return v[v.length - 1];
@@ -100,7 +102,7 @@ function orJoin(parts: any[]) {
 }
 const fmt = (s?: string | null) => (s == null ? null : Number(s).toFixed(2));
 
-/* ---------------- data ---------------- */
+/* ---------------- Data ---------------- */
 async function getCards(opts: {
   q: string | null;
   set: string | null;
@@ -174,13 +176,13 @@ async function getCards(opts: {
   return { rows: rowsRes.rows ?? [], total };
 }
 
-/* ---------------- page ---------------- */
+/* ---------------- Page ---------------- */
 export default async function MtgCardsIndex({
   searchParams,
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams; // <-- KEY FIX (match Pokémon page)
+  const sp = await searchParams; // Promise in Next 15
   const baseHref = "/categories/mtg/cards";
 
   const q = (lastVal(sp?.q) ?? "")?.trim() || null;
@@ -350,11 +352,20 @@ export default async function MtgCardsIndex({
             const img = (c.image_url ?? "").replace(/^http:\/\//, "https://") || "/placeholder.svg";
             const href = `/categories/mtg/cards/${encodeURIComponent(c.id)}`;
             const price = fmt(c.price_usd);
+
             return (
               <li key={c.id} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden hover:bg-white/10 hover:border-white/20 transition">
+                {/* Card (image + text) */}
                 <Link href={href} className="block" prefetch={false}>
                   <div className="relative w-full" style={{ aspectRatio: "3 / 4" }}>
-                    <Image src={img} alt={c.name ?? c.id} fill unoptimized className="object-contain" sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw" />
+                    <Image
+                      src={img}
+                      alt={c.name ?? c.id}
+                      fill
+                      unoptimized
+                      className="object-contain"
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                    />
                   </div>
                   <div className="p-3">
                     <div className="line-clamp-2 text-sm font-medium text-white">{c.name ?? c.id}</div>
@@ -367,13 +378,39 @@ export default async function MtgCardsIndex({
                     <div className="mt-0.5 text-[11px] text-white/60 line-clamp-1">{c.type_line ?? ""}</div>
                   </div>
                 </Link>
+
+                {/* Market CTAs (outside the Link to avoid nested anchors) */}
+                <div className="px-3 pb-3 pt-0 flex items-center justify-end gap-2">
+                  <CardEbayCTA
+                    card={{
+                      id: c.id,
+                      name: c.name ?? c.id,
+                      number: c.number,
+                      set_code: c.set_code ?? null,
+                      set_name: null,
+                    }}
+                    game="Magic The Gathering"
+                    compact
+                  />
+                  <CardAmazonCTA
+                    card={{
+                      id: c.id,
+                      name: c.name ?? c.id,
+                      number: c.number,
+                      set_code: c.set_code ?? null,
+                      set_name: null,
+                    }}
+                    game="Magic The Gathering"
+                    compact
+                  />
+                </div>
               </li>
             );
           })}
         </ul>
       )}
 
-      {/* Pager: pure GET form, explicit "p" on each button */}
+      {/* Pager */}
       {total > perPage && (
         <form action={baseHref} method="get" className="mt-4 flex items-center justify-center gap-2 text-sm">
           {q ? <input type="hidden" name="q" value={q} /> : null}

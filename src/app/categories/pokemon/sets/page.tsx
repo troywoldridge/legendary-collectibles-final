@@ -1,8 +1,13 @@
+
 import "server-only";
 import Link from "next/link";
 import Image from "next/image";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+
+/* ★ Marketplace CTAs */
+import CardAmazonCTA from "@/components/CardAmazonCTA";
+import CardEbayCTA from "@/components/CardEbayCTA";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,17 +56,14 @@ export default async function SetsIndex({
   const page = Math.max(1, reqPage);
   const offset = (page - 1) * perPage;
 
-  // WHERE clause for search
   const where = q
     ? sql`WHERE (name ILIKE ${"%" + q + "%"} OR series ILIKE ${"%" + q + "%"} OR id ILIKE ${"%" + q + "%"})`
     : sql``;
 
-  // Count
   const countSql = sql`SELECT COUNT(*)::int AS count FROM tcg_sets ${where}`;
   const total =
     (await db.execute<{ count: number }>(countSql)).rows?.[0]?.count ?? 0;
 
-  // Page of sets — NOTE: use expanded/unlimited as the two image columns
   const rowsSql = sql`
     SELECT
       id,
@@ -188,6 +190,22 @@ export default async function SetsIndex({
                     )}
                   </div>
                 </Link>
+
+                {/* ★ Text above CTAs (already in this order) */}
+                <div className="px-3 pb-3 pt-0">
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <CardEbayCTA
+                      card={{ id: s.id, name: s.name ?? s.id, set_code: s.id, set_name: s.name ?? s.id }}
+                      game="Pokémon TCG"
+                      variant="pill"
+                    />
+                    <CardAmazonCTA
+                      card={{ id: s.id, name: s.name ?? s.id, set_code: s.id, set_name: s.name ?? s.id }}
+                      game="Pokémon TCG"
+                      variant="pill"
+                    />
+                  </div>
+                </div>
               </li>
             );
           })}
